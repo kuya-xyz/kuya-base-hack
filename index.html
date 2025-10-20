@@ -1,0 +1,136 @@
+<div style="font-family:Arial, sans-serif; padding:30px; max-width:600px; margin:auto; background:transparent; color:#000;">
+  <h2 style="text-align:center;" aria-label="Search for Filipino communities">Where are you from?<br>Where are you going?</h2>
+  <input id="from" placeholder="Manila, Cebu, Davao..." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Home city">
+  <input id="to" placeholder="Dubai, Toronto, Singapore..." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Destination city">
+  <button onclick="search()" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Search for Filipinos">Search</button>
+  <div id="message" style="margin-top:20px; font-size:18px; text-align:center; display:none;" role="status">You are not alone.</div>
+  <div id="count" style="margin-top:10px; font-size:16px; text-align:center; display:none;" role="status"></div>
+  <div id="cta" style="margin-top:10px; text-align:center; display:none;">
+    <button id="boardBtn" onclick="showBoard()" style="background:#28a745; color:white; padding:10px 20px; margin:10px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="View message board">Message Board</button>
+    <button id="sendBtn" onclick="sendMoney()" style="background:#28a745; color:white; padding:10px 20px; margin:10px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Send money">Send Money</button>
+  </div>
+  <div id="board" style="margin-top:20px; display:none;">
+    <h3 style="font-size:16px; text-align:left;" aria-label="Community message board">Local City Board</h3>
+    <input id="postMsg" placeholder="Need SIM, roommate, etc." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Post a message">
+    <div id="error" style="color:#ff4444; font-size:14px; margin-bottom:10px; display:none;"></div>
+    <button onclick="postMessage()" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Post message">Post</button>
+    <div id="wall" style="font-size:14px; color:#333; height:300px; overflow:auto;"></div>
+  </div>
+</div>
+<script>
+  const cityStats = {
+    'dubai': { total: 1500000, fromManila: 14000 },
+    'toronto': { total: 250000, fromManila: 5000 },
+    'singapore': { total: 203243, fromManila: 3000 },
+    'riyadh': { total: 725893, fromManila: 8000 },
+    'vancouver': { total: 250000, fromManila: 4000 },
+    'cruise (norwegian star)': { total: 400000, fromManila: 5000 },
+    'london': { total: 164000, fromManila: 2000 },
+    'los angeles': { total: 800000, fromManila: 10000 },
+    'hong kong': { total: 186869, fromManila: 3000 }
+  };
+  const mockPosts = {
+    'dubai': [
+      '2025-10-19: Need SIM near Burj, text 09xx',
+      '2025-10-18: Roommate wanted, 5K AED/month',
+      '2025-10-17: Anyone from Manila here?'
+    ],
+    'toronto': [
+      '2025-10-19: Looking for winter coat deals',
+      '2025-10-18: Nurse job openings, DM me',
+      '2025-10-17: Pinoy potluck this weekend?'
+    ]
+  };
+  let localPosts = {};
+  function search() {
+    let from = document.getElementById('from').value.trim().toLowerCase() || 'your home';
+    let to = document.getElementById('to').value.trim().toLowerCase() || 'there';
+    let message = document.getElementById('message');
+    let count = document.getElementById('count');
+    let cta = document.getElementById('cta');
+    if (to in cityStats) {
+      count.innerHTML = `${cityStats[to].total.toLocaleString()} Filipinos are currently in ${to.charAt(0).toUpperCase() + to.slice(1)}.<br>${cityStats[to].fromManila.toLocaleString()} are from your hometown of ${from.charAt(0).toUpperCase() + from.slice(1)}.`;
+      message.style.display = 'block';
+      count.style.display = 'block';
+      cta.style.display = 'block';
+    } else {
+      count.innerHTML = `Sorry, no data for ${to.charAt(0).toUpperCase() + to.slice(1)} yet. Try Dubai or Toronto.`;
+      message.style.display = 'none';
+      count.style.display = 'block';
+      cta.style.display = 'none';
+    }
+  }
+  function showBoard() {
+    let to = document.getElementById('to').value.trim().toLowerCase();
+    if (!to) {
+      document.getElementById('error').innerHTML = 'Please enter a destination city.';
+      document.getElementById('error').style.display = 'block';
+      setTimeout(() => document.getElementById('error').style.display = 'none', 3000);
+      return;
+    }
+    document.getElementById('board').style.display = 'block';
+    loadPosts(to);
+    document.getElementById('postMsg').focus();
+  }
+  function postMessage() {
+    let msg = document.getElementById('postMsg').value.trim();
+    let to = document.getElementById('to').value.trim().toLowerCase();
+    if (!msg || !to) {
+      document.getElementById('error').innerHTML = 'Please enter a message and destination city.';
+      document.getElementById('error').style.display = 'block';
+      setTimeout(() => document.getElementById('error').style.display = 'none', 3000);
+      return;
+    }
+    if (!localPosts[to]) localPosts[to] = [];
+    localPosts[to].unshift(`${new Date().toISOString().slice(0, 10)}: ${msg}`);
+    document.getElementById('postMsg').value = '';
+    loadPosts(to);
+  }
+  function loadPosts(city) {
+    let wall = document.getElementById('wall');
+    wall.innerHTML = '';
+    let posts = [...(localPosts[city] || []), ...(mockPosts[city] || [])];
+    posts.forEach(post => {
+      let div = document.createElement('div');
+      div.style.background = '#f0f0f0';
+      div.style.padding = '10px';
+      div.style.margin = '10px 0';
+      div.style.borderRadius = '5px';
+      div.innerHTML = post;
+      wall.appendChild(div);
+    });
+  }
+  function sendMoney() {
+    alert('Text "send $20" to +1-555-123-4567 via WhatsApp. Grandma gets it in GCash instantly. Try it now!');
+  }
+  document.getElementById('from').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      search();
+    }
+  });
+  document.getElementById('to').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      search();
+    }
+  });
+  document.getElementById('postMsg').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      postMessage();
+    }
+  });
+  document.getElementById('boardBtn').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      showBoard();
+    }
+  });
+  document.getElementById('sendBtn').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      sendMoney();
+    }
+  });
+</script>
