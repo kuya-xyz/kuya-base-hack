@@ -3,7 +3,8 @@ const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data from Twilio
+app.use(express.json()); // Also handle JSON for robustness
 
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
@@ -24,15 +25,18 @@ const wallets = new Map();
 
 app.get('/health', (req, res) => res.status(200).send('Healthy'));
 
-app.post('/webhook', async (req, res) => {
-  console.log('Webhook received - Raw Body:', JSON.stringify(req.body));
+app.post('/webhook', (req, res) => {
+  console.log('Webhook received - Headers:', req.headers);
+  console.log('Webhook received - Raw Body:', req.body);
+  let { From, Body } = req.body || {};
+  if (typeof Body !== 'string') Body = (req.body.Body || '').toString().trim();
+  if (typeof From !== 'string') From = (req.body.From || '').toString().trim();
+  if (!From || !Body) {
+    console.error('Invalid request - From or Body missing:', { From, Body, raw: req.body });
+    return res.status(400).send('Invalid request - Missing From or Body');
+  }
+  console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
-    const { From, Body } = req.body;
-    if (!From || !Body) {
-      console.error('Invalid request - Missing From or Body:', JSON.stringify(req.body));
-      return res.status(400).send('Invalid request');
-    }
-    console.log(`Processing message from ${From} with Body: ${Body}`);
     if (Body.toLowerCase().startsWith('send $')) {
       const amount = parseFloat(Body.split('$')[1]);
       if (isNaN(amount) || amount <= 0) {
