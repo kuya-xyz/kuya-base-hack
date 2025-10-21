@@ -20,10 +20,8 @@ const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).send('Healthy');
-});
+// Immediate health check response
+app.get('/health', (req, res) => res.status(200).send('Healthy'));
 
 app.post('/webhook', async (req, res) => {
   console.log('Webhook received:', req.body);
