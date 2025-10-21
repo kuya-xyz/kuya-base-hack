@@ -30,7 +30,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('Healthy');
 });
 
-app.post('/webhook', async (req, res) => { // Ensure async function
+app.post('/webhook', async (req, res) => {
   console.log('Webhook received - Headers:', req.headers);
   console.log('Webhook received - Raw Body:', req.body);
   let { From, Body } = req.body || {};
@@ -55,7 +55,7 @@ app.post('/webhook', async (req, res) => { // Ensure async function
       }
       console.log(`Minting ${amount} USDC to ${recipientNumber}`);
       await client.messages.create({
-        from: 'whatsapp:+15551234567',
+        from: 'whatsapp:+14155238886', // Updated to match sandbox number
         to: recipientNumber,
         body: `Sent $${amount}! Recipient texts "CLAIM" to get it in GCash.`
       });
@@ -64,7 +64,7 @@ app.post('/webhook', async (req, res) => { // Ensure async function
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
       await client.messages.create({
-        from: 'whatsapp:+15551234567',
+        from: 'whatsapp:+14155238886', // Updated to match sandbox number
         to: From,
         body: `You received pesos in GCash! Check your app.`
       });
