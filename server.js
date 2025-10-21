@@ -24,6 +24,11 @@ console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
+// NEW: Add Mock USDC contract setup here
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed contract address
+const usdcAbi = ["function mint(address to, uint256 amount) public"];
+const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
+
 // Immediate and robust health check
 app.get('/health', (req, res) => {
   console.log('Health check requested');
@@ -43,7 +48,8 @@ app.post('/webhook', async (req, res) => {
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
     if (Body.toLowerCase().startsWith('send $')) {
-      const amount = parseFloat(Body.split('$')[1]);
+      // NEW: Replace the old minting log with this minting logic
+      const amount = parseFloat(Body.split('$')[1]) * 10**6; // 6 decimals for USDC
       if (isNaN(amount) || amount <= 0) {
         console.error('Invalid amount parsed from:', Body);
         return res.status(400).send('Invalid amount');
@@ -51,20 +57,24 @@ app.post('/webhook', async (req, res) => {
       const recipientNumber = From;
       if (!wallets.has(recipientNumber)) {
         const newWallet = ethers.Wallet.createRandom();
-        wallets.set(recipientNumber, newWallet.privateKey);
+        wallets.set(recipientNumber, newWallet.address); // Store address, not private key
       }
-      console.log(`Minting ${amount} USDC to ${recipientNumber}`);
+      const recipientAddress = wallets.get(recipientNumber);
+      console.log(`Minting ${amount} USDC to ${recipientAddress}`);
+      const tx = await usdcContract.mint(recipientAddress, amount);
+      await tx.wait();
+      console.log(`Minted ${amount} USDC, Tx: ${tx.hash}`);
       await client.messages.create({
-        from: 'whatsapp:+14155238886', // Verified as sandbox number
+        from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${amount}! Recipient texts "CLAIM" to get it in GCash.`
+        body: `Sent $${amount/10**6}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...`
       });
-      console.log(`Response sent for ${amount} to ${recipientNumber}`);
+      console.log(`Response sent for ${amount/10**6} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
       await client.messages.create({
-        from: 'whatsapp:+14155238886', // Verified as sandbox number
+        from: 'whatsapp:+14155238886',
         to: From,
         body: `You received pesos in GCash! Check your app.`
       });
