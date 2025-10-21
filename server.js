@@ -30,7 +30,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('Healthy');
 });
 
-app.post('/webhook', (req, res) => {
+app.post('/webhook', async (req, res) => { // Ensure async function
   console.log('Webhook received - Headers:', req.headers);
   console.log('Webhook received - Raw Body:', req.body);
   let { From, Body } = req.body || {};
