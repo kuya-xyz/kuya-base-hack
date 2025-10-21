@@ -15,13 +15,17 @@ if (!accountSid || !authToken || !privateKey) {
   process.exit(1);
 }
 
+console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
+console.log('Initializing Ethers provider and wallet...');
 const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
 // Immediate health check response
-app.get('/health', (req, res) => res.status(200).send('Healthy'));
+app.get('/health', (req, res) => {
+  res.status(200).send('Healthy');
+});
 
 app.post('/webhook', async (req, res) => {
   console.log('Webhook received:', req.body);
