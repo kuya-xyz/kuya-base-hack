@@ -3,8 +3,8 @@ const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data from Twilio
-app.use(express.json()); // Also handle JSON for robustness
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
+app.use(express.json()); // Parse JSON data
 
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
@@ -18,12 +18,17 @@ if (!accountSid || !authToken || !privateKey) {
 
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
-console.log('Initializing Ethers provider and wallet...');
+console.log('Initializing Ethers provider...');
 const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
+console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-app.get('/health', (req, res) => res.status(200).send('Healthy'));
+// Immediate and robust health check
+app.get('/health', (req, res) => {
+  console.log('Health check requested');
+  res.status(200).send('Healthy');
+});
 
 app.post('/webhook', (req, res) => {
   console.log('Webhook received - Headers:', req.headers);
