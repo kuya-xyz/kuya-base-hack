@@ -19,9 +19,11 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// NEW NOTE: Use Base mainnet RPC for low-cost chain interaction
+// NEW NOTE: Use Base mainnet RPC with ENS resolution disabled to avoid crash (previous RPC caused ENS lookup failure)
 console.log('Initializing Ethers provider...');
-const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); // Base mainnet RPC
+const provider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
+  skipFetchSetup: true // Disable ENS and network auto-detection
+});
 console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
