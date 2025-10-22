@@ -1,10 +1,8 @@
 const express = require('express');
-// NEW NOTE: Imports Express for the web server, Twilio for WhatsApp, and Ethers for Ethereum interactions
 const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-// NEW NOTE: Sets up Express to handle URL-encoded and JSON data for webhook requests
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
 app.use(express.json()); // Parse JSON data
 
@@ -26,18 +24,18 @@ console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-// NEW: Add Mock USDC contract setup here
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address
+// Mock USDC contract setup
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract
 const usdcAbi = ["function mint(address to, uint256 amount) public"];
 const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
-// NEW NOTE: Configures the Mock USDC contract for minting, using the wallet derived from PRIVATE_KEY
 
-// Immediate and robust health check
+// Health check
 app.get('/health', (req, res) => {
   console.log('Health check requested');
   res.status(200).send('Healthy');
 });
 
+// Webhook handler
 app.post('/webhook', async (req, res) => {
   console.log('Webhook received - Headers:', req.headers);
   console.log('Webhook received - Raw Body:', req.body);
@@ -51,27 +49,36 @@ app.post('/webhook', async (req, res) => {
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
     if (Body.toLowerCase().startsWith('send $')) {
-      const amount = parseFloat(Body.split('$')[1]) * 1000000; // FIXED: Multiplies by 1,000,000 for 6 decimals (e.g., $5 = 5,000,000 micro-USDC)
-      if (isNaN(amount) || amount <= 0) {
-        console.error('Invalid amount parsed from:', Body);
-        return res.status(400).send('Invalid amount');
+      const dollarAmount = parseFloat(Body.split('$')[1]); // Extract $5 as 5
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 10) { // Limit to $10 max for safety
+        console.error('Invalid or excessive amount parsed from:', Body);
+        return res.status(400).send('Invalid amount (max $10)');
       }
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Convert to micro-USDC (6 decimals)
+      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
       const recipientNumber = From;
       if (!wallets.has(recipientNumber)) {
         const newWallet = ethers.Wallet.createRandom();
         wallets.set(recipientNumber, newWallet.address);
       }
       const recipientAddress = wallets.get(recipientNumber);
-      console.log(`Minting ${amount} USDC to ${recipientAddress}`);
-      const tx = await usdcContract.mint(recipientAddress, amount);
+      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
+
+      // Set reasonable gas limit and fetch current gas price
+      const gasPrice = await provider.getGasPrice();
+      const gasLimit = 200000; // Reasonable limit for a mint (adjust if needed)
+      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
+        gasLimit: gasLimit,
+        gasPrice: gasPrice,
+      });
       await tx.wait();
-      console.log(`Minted ${amount} USDC, Tx: ${tx.hash}`);
+      console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${amount/1000000}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...` // NEW NOTE: Displays the correct dollar amount
+        body: `Sent $${dollarAmount}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...`
       });
-      console.log(`Response sent for ${amount/1000000} to ${recipientNumber}`);
+      console.log(`Response sent for $${dollarAmount} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
