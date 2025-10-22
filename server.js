@@ -3,36 +3,33 @@ const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data from Twilio
-app.use(express.json()); // Parse JSON data for robustness
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
+app.use(express.json()); // Parse JSON data
 
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const privateKey = process.env.PRIVATE_KEY;
+const paymasterRpcUrl = process.env.PAYMASTER_RPC_URL; // New: Paymaster RPC from CDP for sponsorship
 
-if (!accountSid || !authToken || !privateKey) {
-  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, or PRIVATE_KEY');
+if (!accountSid || !authToken || !privateKey || !paymasterRpcUrl) {
+  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, PRIVATE_KEY, or PAYMASTER_RPC_URL');
   process.exit(1);
 }
 
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// Note: Switched to Base mainnet RPC endpoint for lower gas fees (from Sepolia testnet RPC 'https://sepolia.base.org')
-console.log('Initializing Ethers provider...');
-const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); // Base mainnet RPC endpoint for production-like low-cost transactions
-
+// New: Use Paymaster RPC for sponsored transactions on Base mainnet to reduce gas costs
+console.log('Initializing Ethers provider with Paymaster RPC...');
+const provider = new ethers.JsonRpcProvider(paymasterRpcUrl); // Paymaster RPC for gas sponsorship
 console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-// Note: USDC contract address on Base mainnet; for minting, this assumes a mock or permitted contract, as real USDC is not freely mintable
-const usdcAddress = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // Official USDC contract on Base mainnet
-
-const usdcAbi = [
-  "function mint(address to, uint256 amount) public" // ABI for mint function; in real USDC, mint is restricted - use a mock contract for testing
-];
+// Restored Note: NEW: Add Mock USDC contract setup here
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract (redeploy on Base mainnet)
+const usdcAbi = ["function mint(address to, uint256 amount) public"];
 const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
 
 // Immediate and robust health check
@@ -59,8 +56,8 @@ app.post('/webhook', async (req, res) => {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $10)');
       }
-      // Note: Convert dollar amount to micro-USDC (6 decimals) for USDC precision
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // e.g., $5 = 5,000,000 micro-USDC
+      // New Note: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
       const recipientNumber = From;
       if (!wallets.has(recipientNumber)) {
@@ -70,7 +67,7 @@ app.post('/webhook', async (req, res) => {
       const recipientAddress = wallets.get(recipientNumber);
       console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
 
-      // Note: Fetch gas data from Base mainnet for accurate, low-cost transactions
+      // New: Fetch gas data from Base mainnet for accurate, low-cost transactions
       const feeData = await provider.getFeeData();
       const gasPrice = feeData.gasPrice;
       const gasLimit = 200000; // Reasonable limit for mint operation on Base
