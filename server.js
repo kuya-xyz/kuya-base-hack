@@ -19,18 +19,19 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// NEW NOTE: Reverted to standard Base mainnet RPC endpoint for low gas fees (removed Paymaster due to unsupported protocol error; for future, integrate ERC-4337 with bundlers like Pimlico)
+// NEW NOTE: Use Base mainnet RPC for low-cost chain interaction
 console.log('Initializing Ethers provider...');
-const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); // Base mainnet RPC for low fees
-
+const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); // Base mainnet RPC
 console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
 // NEW: Add Mock USDC contract setup here (restored from previous versions)
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address (redeploy on Base mainnet for lower gas costs)
-const usdcAbi = ["function mint(address to, uint256 amount) public"];
-const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address (for reference, redeploy on Base mainnet if needed)
+// NEW NOTE: Define a simple contract for conversion rate (deploy this on Base mainnet)
+const rateContractAddress = '0xYourDeployedRateContractAddress'; // Replace with your deployed contract address
+const rateAbi = ["function getRate() view returns (uint256)"]; // Simple function returning USD to PHP rate (e.g., 57 for $1 = ₱57)
+const rateContract = new ethers.Contract(rateContractAddress, rateAbi, provider); // Read-only, no wallet needed
 
 // Immediate and robust health check
 app.get('/health', (req, res) => {
@@ -59,30 +60,21 @@ app.post('/webhook', async (req, res) => {
       // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC (restored from previous versions)
       const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
-      const recipientNumber = From;
-      if (!wallets.has(recipientNumber)) {
-        const newWallet = ethers.Wallet.createRandom();
-        wallets.set(recipientNumber, newWallet.address);
-      }
-      const recipientAddress = wallets.get(recipientNumber);
-      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
 
-      // NEW NOTE: Fetch gas data for Base mainnet to ensure low fees; for future, add ERC-4337 UserOp here for Paymaster sponsorship (e.g., create UserOp with mint calldata and send to a Bundler like Pimlico; refer to Base docs for bundler integration)
-      const feeData = await provider.getFeeData();
-      const gasPrice = feeData.gasPrice;
-      const gasLimit = 200000; // Reasonable limit for mint on Base
-      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
-        gasLimit: gasLimit,
-        gasPrice: gasPrice,
-      });
-      await tx.wait();
-      console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
+      // NEW NOTE: Read conversion rate from Base mainnet contract (no gas cost for read-only call)
+      const rate = await rateContract.getRate(); // Fetch rate (e.g., 57 for $1 = ₱57)
+      const pesoAmount = dollarAmount * rate; // Calculate PHP equivalent
+      console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
+
+      const recipientNumber = From;
+      // FUTURE MINTING INJECTION POINT: Here, you can add minting logic with usdcContract.mint(recipientAddress, amountInMicroUSDC) once wallet is funded with Base mainnet ETH
+      // For now, simulate response without minting
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${dollarAmount}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...`
+        body: `Sending $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)}! Recipient texts "CLAIM" to get it in GCash. (Base mainnet rate applied)`
       });
-      console.log(`Response sent for $${dollarAmount} to ${recipientNumber}`);
+      console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
