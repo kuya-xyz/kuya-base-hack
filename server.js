@@ -19,7 +19,7 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// NEW NOTE: Use Base mainnet RPC with explicit chain ID (corrected from invalid skipFetchSetup option)
+// NEW NOTE: Use Base mainnet RPC with explicit chain ID
 console.log('Initializing Ethers provider...');
 const provider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   name: 'base-mainnet',
@@ -64,9 +64,9 @@ app.post('/webhook', async (req, res) => {
       const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
 
-      // NEW NOTE: Read conversion rate from Base mainnet contract (no gas cost for read-only call)
-      const rate = await rateContract.getRate(); // Fetch rate (e.g., 57 for $1 = ₱57)
-      const pesoAmount = dollarAmount * rate; // Calculate PHP equivalent
+      // NEW NOTE: Read conversion rate from Base mainnet contract (no gas cost for read-only call), fixed BigInt issue
+      const rate = await rateContract.getRate(); // Fetch rate as BigInt (e.g., 57n)
+      const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert dollarAmount to BigInt and multiply, then to Number
       console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
 
       const recipientNumber = From;
