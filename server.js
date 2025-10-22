@@ -45,37 +45,27 @@ app.post('/webhook', async (req, res) => {
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
     if (Body.toLowerCase().startsWith('send $')) {
-      const dollarAmount = parseFloat(Body.split('$')[1]);
-      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 10) {
-        console.error('Invalid or excessive amount parsed from:', Body);
-        return res.status(400).send('Invalid amount (max $10)');
+      const amount = parseFloat(Body.split('$')[1]) * 1000000;
+      if (isNaN(amount) || amount <= 0) {
+        console.error('Invalid amount parsed from:', Body);
+        return res.status(400).send('Invalid amount');
       }
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
-      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
       const recipientNumber = From;
       if (!wallets.has(recipientNumber)) {
         const newWallet = ethers.Wallet.createRandom();
         wallets.set(recipientNumber, newWallet.address);
       }
       const recipientAddress = wallets.get(recipientNumber);
-      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
-
-      // Use getFeeData instead of getGasPrice
-      const feeData = await provider.getFeeData();
-      const gasPrice = feeData.gasPrice || (await provider.getBlock('latest')).baseFeePerGas; // Fallback to base fee
-      const gasLimit = 200000; // Reasonable limit for mint
-      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
-        gasLimit: gasLimit,
-        gasPrice: gasPrice,
-      });
+      console.log(`Minting ${amount} USDC to ${recipientAddress}`);
+      const tx = await usdcContract.mint(recipientAddress, amount);
       await tx.wait();
-      console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
+      console.log(`Minted ${amount} USDC, Tx: ${tx.hash}`);
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${dollarAmount}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...`
+        body: `Sent $${amount/1000000}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...`
       });
-      console.log(`Response sent for $${dollarAmount} to ${recipientNumber}`);
+      console.log(`Response sent for ${amount/1000000} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
