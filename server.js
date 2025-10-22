@@ -1,11 +1,14 @@
 const express = require('express');
+// NEW NOTE: Imports Express for the web server, Twilio for WhatsApp, and Ethers for Ethereum interactions
 const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// NEW NOTE: Sets up Express to handle URL-encoded and JSON data for webhook requests
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
+app.use(express.json()); // Parse JSON data
 
+// Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const privateKey = process.env.PRIVATE_KEY;
@@ -23,10 +26,13 @@ console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b';
+// NEW: Add Mock USDC contract setup here
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address
 const usdcAbi = ["function mint(address to, uint256 amount) public"];
 const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
+// NEW NOTE: Configures the Mock USDC contract for minting, using the wallet derived from PRIVATE_KEY
 
+// Immediate and robust health check
 app.get('/health', (req, res) => {
   console.log('Health check requested');
   res.status(200).send('Healthy');
@@ -45,7 +51,7 @@ app.post('/webhook', async (req, res) => {
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
     if (Body.toLowerCase().startsWith('send $')) {
-      const amount = parseFloat(Body.split('$')[1]) * 10**6;
+      const amount = parseFloat(Body.split('$')[1]) * 1000000; // FIXED: Multiplies by 1,000,000 for 6 decimals (e.g., $5 = 5,000,000 micro-USDC)
       if (isNaN(amount) || amount <= 0) {
         console.error('Invalid amount parsed from:', Body);
         return res.status(400).send('Invalid amount');
@@ -63,9 +69,9 @@ app.post('/webhook', async (req, res) => {
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${amount/10**6}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...`
+        body: `Sent $${amount/1000000}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}...` // NEW NOTE: Displays the correct dollar amount
       });
-      console.log(`Response sent for ${amount/10**6} to ${recipientNumber}`);
+      console.log(`Response sent for ${amount/1000000} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
