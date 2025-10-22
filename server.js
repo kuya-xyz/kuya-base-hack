@@ -19,7 +19,7 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// NEW NOTE: Use Base mainnet RPC with ENS resolution disabled to avoid crash (previous RPC caused ENS lookup failure)
+// NEW NOTE: Use Base mainnet RPC with ENS resolution disabled to avoid crash
 console.log('Initializing Ethers provider...');
 const provider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   skipFetchSetup: true // Disable ENS and network auto-detection
@@ -30,8 +30,8 @@ const wallets = new Map();
 
 // NEW: Add Mock USDC contract setup here (restored from previous versions)
 const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address (for reference, redeploy on Base mainnet if needed)
-// NEW NOTE: Define a simple contract for conversion rate (deploy this on Base mainnet)
-const rateContractAddress = '0xYourDeployedRateContractAddress'; // Replace with your deployed contract address
+// NEW NOTE: Define a simple contract for conversion rate (deployed on Base mainnet)
+const rateContractAddress = '0x51456c155B55AB3B01F6CaF3c1aa3aDD0C587697'; // Your deployed RateContract address on Base Mainnet
 const rateAbi = ["function getRate() view returns (uint256)"]; // Simple function returning USD to PHP rate (e.g., 57 for $1 = ₱57)
 const rateContract = new ethers.Contract(rateContractAddress, rateAbi, provider); // Read-only, no wallet needed
 
