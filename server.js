@@ -57,8 +57,13 @@ app.post('/webhook', async (req, res) => {
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
     if (Body.toLowerCase().startsWith('send $')) {
-      const dollarAmount = parseFloat(Body.split('$')[1]);
-      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) { // Increased limit from 10 to 100
+      const match = Body.match(/send \$(\d+(?:\.\d+)?)\s+to\s+(.+?)(?:\s|$)/i);
+      if (!match) {
+        return res.status(400).send('Invalid format - try Send $5 to [name]');
+      }
+      const dollarAmount = parseFloat(match[1]);
+      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Lola, Nico)
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $100)');
       }
@@ -90,7 +95,7 @@ app.post('/webhook', async (req, res) => {
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to 8886! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🖤 Kuya***` // Updated message with new addition
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY***` // Updated to "Just sent"
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
