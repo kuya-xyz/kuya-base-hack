@@ -33,8 +33,8 @@ const wallets = new Map();
 const usdcAddress = '0x846849310a0fE0524a3E0eaB545789C616eAB39B'; // Verified MockUSDC address on Base mainnet
 const usdcAbi = ["function mint(address to, uint256 amount) public"];
 const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
-// NEW NOTE: Define a simple contract for conversion rate (deployed on Base mainnet)
-const rateContractAddress = '0x51456c155B55AB3B01F6CaF3c1aa3aDD0C587697'; // Your deployed RateContract address on Base Mainnet
+// NEW NOTE: Define a simple contract for conversion rate (updated with new Base mainnet address)
+const rateContractAddress = '0x827E15376f3B32949C0124F05fD7D708eA7AeEC2'; // Updated RateContract address on Base Mainnet with $1 = ₱56
 const rateAbi = ["function getRate() view returns (uint256)"];
 const rateContract = new ethers.Contract(rateContractAddress, rateAbi, provider); // Read-only, no wallet needed
 
@@ -67,7 +67,7 @@ app.post('/webhook', async (req, res) => {
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
 
       // NEW NOTE: Read conversion rate from Base mainnet contract, fixed BigInt issue
-      // NEW NOTE: Static rate of 57 is used (e.g., $1 = ₱57); consider future upgrade to real-time oracle (e.g., Chainlink) for dynamic rates
+      // NEW NOTE: Static rate of 56 is used (e.g., $1 = ₱56); updated from 57, consider future upgrade to real-time oracle (e.g., Chainlink) for dynamic rates
       const rate = await rateContract.getRate(); // Fetch rate as BigInt
       const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert and multiply
       console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
@@ -90,7 +90,7 @@ app.post('/webhook', async (req, res) => {
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to 8886! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY***` // Updated message with DEMO ONLY on new line
+        body: `Sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to 8886! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🖤 Kuya***` // Updated message with new addition
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
