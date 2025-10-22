@@ -19,7 +19,7 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// NEW NOTE: Use Base mainnet RPC with explicit chain ID
+// NEW NOTE: Use Base mainnet RPC with explicit chain ID for minting
 console.log('Initializing Ethers provider...');
 const provider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   name: 'base-mainnet',
@@ -29,11 +29,13 @@ console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-// NEW: Add Mock USDC contract setup here (restored from previous versions)
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address (for reference, redeploy on Base mainnet if needed)
+// NEW: Add Mock USDC contract setup here (updated with verified Base mainnet address)
+const usdcAddress = '0x846849310a0fE0524a3E0eaB545789C616eAB39B'; // Verified MockUSDC address on Base mainnet
+const usdcAbi = ["function mint(address to, uint256 amount) public"];
+const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
 // NEW NOTE: Define a simple contract for conversion rate (deployed on Base mainnet)
 const rateContractAddress = '0x51456c155B55AB3B01F6CaF3c1aa3aDD0C587697'; // Your deployed RateContract address on Base Mainnet
-const rateAbi = ["function getRate() view returns (uint256)"]; // Simple function returning USD to PHP rate (e.g., 57 for $1 = ₱57)
+const rateAbi = ["function getRate() view returns (uint256)"];
 const rateContract = new ethers.Contract(rateContractAddress, rateAbi, provider); // Read-only, no wallet needed
 
 // Immediate and robust health check
@@ -60,23 +62,35 @@ app.post('/webhook', async (req, res) => {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $100)');
       }
-      // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC (restored from previous versions)
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
+      // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
 
-      // NEW NOTE: Read conversion rate from Base mainnet contract (no gas cost for read-only call), fixed BigInt issue
+      // NEW NOTE: Read conversion rate from Base mainnet contract, fixed BigInt issue
       // NEW NOTE: Static rate of 57 is used (e.g., $1 = ₱57); consider future upgrade to real-time oracle (e.g., Chainlink) for dynamic rates
-      const rate = await rateContract.getRate(); // Fetch rate as BigInt (e.g., 57n)
+      const rate = await rateContract.getRate(); // Fetch rate as BigInt
       const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert and multiply
       console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
 
       const recipientNumber = From;
-      // FUTURE MINTING INJECTION POINT: Here, you can add minting logic with usdcContract.mint(recipientAddress, amountInMicroUSDC) once wallet is funded with Base mainnet ETH
-      // For now, simulate response without minting
+      if (!wallets.has(recipientNumber)) {
+        const newWallet = ethers.Wallet.createRandom();
+        wallets.set(recipientNumber, newWallet.address);
+      }
+      const recipientAddress = wallets.get(recipientNumber);
+      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
+
+      // Minting injection point (enabled for Base mainnet with verified contract)
+      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
+        gasLimit: 200000 // Reasonable limit for mint on Base
+      });
+      await tx.wait();
+      console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
+
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sending $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)}! Recipient texts "CLAIM" to get it in GCash. (Base mainnet rate applied)`
+        body: `Sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)}! Recipient texts "CLAIM". Tx: ${tx.hash.substring(0, 10)}... (Base mainnet rate applied - DEMO only)`
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
