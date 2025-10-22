@@ -3,10 +3,9 @@ const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
-app.use(express.json()); // Parse JSON data
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const privateKey = process.env.PRIVATE_KEY;
@@ -24,18 +23,15 @@ console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-// Mock USDC contract setup
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b';
 const usdcAbi = ["function mint(address to, uint256 amount) public"];
 const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
 
-// Health check
 app.get('/health', (req, res) => {
   console.log('Health check requested');
   res.status(200).send('Healthy');
 });
 
-// Webhook handler
 app.post('/webhook', async (req, res) => {
   console.log('Webhook received - Headers:', req.headers);
   console.log('Webhook received - Raw Body:', req.body);
@@ -49,12 +45,12 @@ app.post('/webhook', async (req, res) => {
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
     if (Body.toLowerCase().startsWith('send $')) {
-      const dollarAmount = parseFloat(Body.split('$')[1]); // Extract $5 as 5
-      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 10) { // Limit to $10 max for safety
+      const dollarAmount = parseFloat(Body.split('$')[1]);
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 10) {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $10)');
       }
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Convert to micro-USDC (6 decimals)
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
       const recipientNumber = From;
       if (!wallets.has(recipientNumber)) {
@@ -64,9 +60,10 @@ app.post('/webhook', async (req, res) => {
       const recipientAddress = wallets.get(recipientNumber);
       console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
 
-      // Set reasonable gas limit and fetch current gas price
-      const gasPrice = await provider.getGasPrice();
-      const gasLimit = 200000; // Reasonable limit for a mint (adjust if needed)
+      // Use getFeeData instead of getGasPrice
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.gasPrice || (await provider.getBlock('latest')).baseFeePerGas; // Fallback to base fee
+      const gasLimit = 200000; // Reasonable limit for mint
       const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
         gasLimit: gasLimit,
         gasPrice: gasPrice,
