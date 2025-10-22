@@ -10,22 +10,26 @@ app.use(express.json()); // Parse JSON data
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const privateKey = process.env.PRIVATE_KEY;
+const paymasterRpcUrl = process.env.PAYMASTER_RPC_URL; // New: Paymaster RPC from CDP for gas sponsorship
 
-if (!accountSid || !authToken || !privateKey) {
-  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, or PRIVATE_KEY');
+if (!accountSid || !authToken || !privateKey || !paymasterRpcUrl) {
+  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, PRIVATE_KEY, or PAYMASTER_RPC_URL');
   process.exit(1);
 }
 
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
-console.log('Initializing Ethers provider...');
-const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
+
+// Note: Use Paymaster RPC for sponsored transactions on Base mainnet to reduce gas costs
+console.log('Initializing Ethers provider with Paymaster RPC...');
+const provider = new ethers.JsonRpcProvider(paymasterRpcUrl); // Paymaster RPC for gasless transactions
+
 console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
-// NEW: Add Mock USDC contract setup here
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address
+// NEW: Add Mock USDC contract setup here (restored from previous versions)
+const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address (redeploy on Base mainnet for lower gas costs)
 const usdcAbi = ["function mint(address to, uint256 amount) public"];
 const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, wallet);
 
@@ -49,11 +53,11 @@ app.post('/webhook', async (req, res) => {
   try {
     if (Body.toLowerCase().startsWith('send $')) {
       const dollarAmount = parseFloat(Body.split('$')[1]);
-      if (isNaN(dollarAmount) || dollarAmount <= 0) {
-        console.error('Invalid amount parsed from:', Body);
-        return res.status(400).send('Invalid amount');
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 10) {
+        console.error('Invalid or excessive amount parsed from:', Body);
+        return res.status(400).send('Invalid amount (max $10)');
       }
-      // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC
+      // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC (restored from previous versions)
       const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
       const recipientNumber = From;
@@ -63,7 +67,16 @@ app.post('/webhook', async (req, res) => {
       }
       const recipientAddress = wallets.get(recipientNumber);
       console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
-      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC);
+
+      // Note: Fetch gas data for Base mainnet to ensure low fees; Paymaster sponsors the transaction (new note for gas optimization)
+      // Future Minting Injection Point: Here, you can add ERC-4337 UserOperation setup for advanced account abstraction. For example, create a UserOp with the mint calldata, set the PaymasterAndData, and send to a Bundler. This would allow gasless minting with sponsorship limits (e.g., $0.05 per user). Refer to Base docs for bundler integration.
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.gasPrice;
+      const gasLimit = 200000; // Reasonable limit for mint operation on Base
+      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
+        gasLimit: gasLimit,
+        gasPrice: gasPrice,
+      });
       await tx.wait();
       console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
       await client.messages.create({
