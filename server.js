@@ -6,7 +6,6 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const privateKey = process.env.PRIVATE_KEY;
@@ -21,7 +20,7 @@ const client = new twilio(accountSid, authToken);
 console.log('Initializing Ethers provider...');
 const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
 console.log('Initializing Ethers wallet...');
-const wallet = new ethers.Wallet('0xYOUR_PRIVATE_KEY_HERE_REPLACE_WITH_ACTUAL', provider); // Replace with actual private key for 0x8ed15B...
+const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
 const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b';
