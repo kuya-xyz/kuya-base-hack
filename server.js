@@ -95,7 +95,7 @@ app.post('/webhook', async (req, res) => {
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 💙 Kuya***` // Updated with blue heart
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🖤 Kuya***` // Updated to requested line
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
