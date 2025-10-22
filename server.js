@@ -15,16 +15,13 @@ if (!accountSid || !authToken || !privateKey) {
   process.exit(1);
 }
 
-console.log('Twilio init with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
-console.log('Ethers provider init');
 const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
-console.log('Ethers wallet init');
 const wallet = new ethers.Wallet(privateKey, provider);
 const wallets = new Map();
 
 app.get('/health', (req, res) => {
-  console.log('Health check hit');
+  console.log('Health check hit at', new Date().toISOString());
   res.status(200).send('Healthy');
 });
 
