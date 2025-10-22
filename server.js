@@ -56,17 +56,18 @@ app.post('/webhook', async (req, res) => {
   try {
     if (Body.toLowerCase().startsWith('send $')) {
       const dollarAmount = parseFloat(Body.split('$')[1]);
-      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 10) {
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) { // Increased limit from 10 to 100
         console.error('Invalid or excessive amount parsed from:', Body);
-        return res.status(400).send('Invalid amount (max $10)');
+        return res.status(400).send('Invalid amount (max $100)');
       }
       // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC (restored from previous versions)
       const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
 
       // NEW NOTE: Read conversion rate from Base mainnet contract (no gas cost for read-only call), fixed BigInt issue
+      // NEW NOTE: Static rate of 57 is used (e.g., $1 = ₱57); consider future upgrade to real-time oracle (e.g., Chainlink) for dynamic rates
       const rate = await rateContract.getRate(); // Fetch rate as BigInt (e.g., 57n)
-      const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert dollarAmount to BigInt and multiply, then to Number
+      const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert and multiply
       console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
 
       const recipientNumber = From;
