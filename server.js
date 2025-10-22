@@ -10,19 +10,18 @@ app.use(express.json()); // Parse JSON data
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const privateKey = process.env.PRIVATE_KEY;
-const paymasterRpcUrl = process.env.PAYMASTER_RPC_URL; // New: Paymaster RPC from CDP for gas sponsorship
 
-if (!accountSid || !authToken || !privateKey || !paymasterRpcUrl) {
-  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, PRIVATE_KEY, or PAYMASTER_RPC_URL');
+if (!accountSid || !authToken || !privateKey) {
+  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, or PRIVATE_KEY');
   process.exit(1);
 }
 
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// Note: Use Paymaster RPC for sponsored transactions on Base mainnet to reduce gas costs
-console.log('Initializing Ethers provider with Paymaster RPC...');
-const provider = new ethers.JsonRpcProvider(paymasterRpcUrl); // Paymaster RPC for gasless transactions
+// NEW NOTE: Reverted to standard Base mainnet RPC endpoint for low gas fees (removed Paymaster due to unsupported protocol error; for future, integrate ERC-4337 with bundlers like Pimlico)
+console.log('Initializing Ethers provider...');
+const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); // Base mainnet RPC for low fees
 
 console.log('Initializing Ethers wallet...');
 const wallet = new ethers.Wallet(privateKey, provider);
@@ -68,11 +67,10 @@ app.post('/webhook', async (req, res) => {
       const recipientAddress = wallets.get(recipientNumber);
       console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
 
-      // Note: Fetch gas data for Base mainnet to ensure low fees; Paymaster sponsors the transaction (new note for gas optimization)
-      // Future Minting Injection Point: Here, you can add ERC-4337 UserOperation setup for advanced account abstraction. For example, create a UserOp with the mint calldata, set the PaymasterAndData, and send to a Bundler. This would allow gasless minting with sponsorship limits (e.g., $0.05 per user). Refer to Base docs for bundler integration.
+      // NEW NOTE: Fetch gas data for Base mainnet to ensure low fees; for future, add ERC-4337 UserOp here for Paymaster sponsorship (e.g., create UserOp with mint calldata and send to a Bundler like Pimlico; refer to Base docs for bundler integration)
       const feeData = await provider.getFeeData();
       const gasPrice = feeData.gasPrice;
-      const gasLimit = 200000; // Reasonable limit for mint operation on Base
+      const gasLimit = 200000; // Reasonable limit for mint on Base
       const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
         gasLimit: gasLimit,
         gasPrice: gasPrice,
