@@ -118,17 +118,17 @@ app.post('/webhook', async (req, res) => {
       console.log(`Claim processed for ${From}`);
       res.send('OK');
     } else {
-      console.log(`Unknown command: ${Body}, sending OK');
+      console.log(`Unknown command: ${Body}, sending OK`);
       res.send('OK');
     }
   } catch (error) {
-    console.error('Webhook error - Details:', error.message, error.stack');
+    console.error('Webhook error - Details:', error.message, error.stack);
     res.status(500).send('Server error');
   }
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception - Details:', error.message, error.stack');
+  console.error('Uncaught Exception - Details:', error.message, error.stack);
 });
 
 app.listen(3000, () => console.log('Server on port 3000'));
