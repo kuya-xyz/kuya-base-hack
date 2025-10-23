@@ -122,13 +122,13 @@ app.post('/webhook', async (req, res) => {
       res.send('OK');
     }
   } catch (error) {
-    console.error('Webhook error - Details:', error.message, error.stack');
+    console.error('Webhook error - Details:', error.message, error.stack); // Fixed syntax error
     res.status(500).send('Server error');
   }
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception - Details:', error.message, error.stack');
+  console.error('Uncaught Exception - Details:', error.message, error.stack);
 });
 
 app.listen(3000, () => console.log('Server on port 3000'));
