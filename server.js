@@ -65,19 +65,16 @@ app.post('/webhook', async (req, res) => {
         return res.status(400).send('Invalid format - try Send $5 to [name]');
       }
       const dollarAmount = parseFloat(match[1]);
-      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Dante)
+      const recipientName = match[2].trim(); // Extracts name after "to"
       if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $100)');
       }
-      // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
 
-      // NEW NOTE: Read conversion rate from Base mainnet contract, fixed BigInt issue
-      // NEW NOTE: Static rate of 56 is used (e.g., $1 = ₱56); updated from 57, consider future upgrade to real-time oracle (e.g., Chainlink) for dynamic rates
-      const rate = await rateContract.getRate(); // Fetch rate as BigInt
-      const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert and multiply
+      const rate = await rateContract.getRate(); // BigInt
+      const pesoAmount = Number(BigInt(dollarAmount) * rate);
       console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
 
       const recipientNumber = From;
@@ -88,30 +85,29 @@ app.post('/webhook', async (req, res) => {
       const recipientAddress = wallets.get(recipientNumber);
       console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
 
-      // Minting injection point (enabled for Base mainnet with verified contract)
       const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
-        gasLimit: 200000 // Reasonable limit for mint on Base
+        gasLimit: 200000
       });
       await tx.wait();
       const receipt = await provider.getTransactionReceipt(tx.hash);
-      const gasUsed = Number(receipt.gasUsed); // Fixed to handle BigInt
+      const gasUsed = Number(receipt.gasUsed);
       const feeData = await provider.getFeeData();
-      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000; // Default to 1.5 Gwei if null
-      const gasCostEth = gasUsed * gasPrice / 1e18; // Convert wei to ETH
-      const gasCostUsd = gasCostEth * ETH_PRICE_USD; // Convert ETH to USD
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
+      const gasCostEth = gasUsed * gasPrice / 1e18;
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD;
       console.log(`Gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
 
       await client.messages.create({
-        from: 'whatsapp:+14155238886', // Reverted to original number
+        from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash.\n${gasCostUsd < 0.01 ? 'Transaction Fee < $0.01' : 'This remittance only cost you $' + gasCostUsd.toFixed(2)}\nBase Ref#: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
       await client.messages.create({
-        from: 'whatsapp:+14155238886', // Reverted to original number
+        from: 'whatsapp:+14155238886',
         to: From,
         body: `You received pesos in GCash! Check your app.`
       });
@@ -122,7 +118,7 @@ app.post('/webhook', async (req, res) => {
       res.send('OK');
     }
   } catch (error) {
-    console.error('Webhook error - Details:', error.message, error.stack); // Fixed syntax error
+    console.error('Webhook error - Details:', error.message, error.stack);
     res.status(500).send('Server error');
   }
 });
