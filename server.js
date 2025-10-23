@@ -65,7 +65,7 @@ app.post('/webhook', async (req, res) => {
         return res.status(400).send('Invalid format - try Send $5 to [name]');
       }
       const dollarAmount = parseFloat(match[1]);
-      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Lola, Nico)
+      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Dante)
       if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $100)');
@@ -94,7 +94,7 @@ app.post('/webhook', async (req, res) => {
       });
       await tx.wait();
       const receipt = await provider.getTransactionReceipt(tx.hash);
-      const gasUsed = receipt.gasUsed.toNumber();
+      const gasUsed = Number(receipt.gasUsed); // Fixed to handle BigInt
       const gasPrice = (await provider.getGasPrice()).toNumber();
       const gasCostEth = gasUsed * gasPrice / 1e18; // Convert wei to ETH
       const gasCostUsd = gasCostEth * ETH_PRICE_USD; // Convert ETH to USD
