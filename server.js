@@ -62,7 +62,7 @@ app.post('/webhook', async (req, res) => {
         return res.status(400).send('Invalid format - try Send $5 to [name]');
       }
       const dollarAmount = parseFloat(match[1]);
-      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Lola, Nico)
+      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Mia, Mark)
       if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $100)');
@@ -93,16 +93,16 @@ app.post('/webhook', async (req, res) => {
       console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
 
       await client.messages.create({
-        from: 'whatsapp:+12025550123', // Updated Twilio number (replace with your new number)
+        from: 'whatsapp:+14155238886', // Reverted to original number
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***` // Updated with white heart
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
       await client.messages.create({
-        from: 'whatsapp:+12025550123', // Updated Twilio number (replace with your new number)
+        from: 'whatsapp:+14155238886', // Reverted to original number
         to: From,
         body: `You received pesos in GCash! Check your app.`
       });
