@@ -38,6 +38,9 @@ const rateContractAddress = '0x827E15376f3B32949C0124F05fD7D708eA7AeEC2'; // Upd
 const rateAbi = ["function getRate() view returns (uint256)"];
 const rateContract = new ethers.Contract(rateContractAddress, rateAbi, provider); // Read-only, no wallet needed
 
+// Approximate ETH price in USD (for demo purposes, adjustable)
+const ETH_PRICE_USD = 2600; // Example price, update as needed
+
 // Immediate and robust health check
 app.get('/health', (req, res) => {
   console.log('Health check requested');
@@ -62,7 +65,7 @@ app.post('/webhook', async (req, res) => {
         return res.status(400).send('Invalid format - try Send $5 to [name]');
       }
       const dollarAmount = parseFloat(match[1]);
-      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Mia, Mark)
+      const recipientName = match[2].trim(); // Extracts name after "to" (e.g., Lola, Nico)
       if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
         console.error('Invalid or excessive amount parsed from:', Body);
         return res.status(400).send('Invalid amount (max $100)');
@@ -90,12 +93,17 @@ app.post('/webhook', async (req, res) => {
         gasLimit: 200000 // Reasonable limit for mint on Base
       });
       await tx.wait();
-      console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
+      const receipt = await provider.getTransactionReceipt(tx.hash);
+      const gasUsed = receipt.gasUsed.toNumber();
+      const gasPrice = (await provider.getGasPrice()).toNumber();
+      const gasCostEth = gasUsed * gasPrice / 1e18; // Convert wei to ETH
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD; // Convert ETH to USD
+      console.log(`Gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
 
       await client.messages.create({
         from: 'whatsapp:+14155238886', // Reverted to original number
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\nThis transaction only cost you $${gasCostUsd.toFixed(2)}\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
