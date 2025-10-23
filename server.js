@@ -95,7 +95,8 @@ app.post('/webhook', async (req, res) => {
       await tx.wait();
       const receipt = await provider.getTransactionReceipt(tx.hash);
       const gasUsed = Number(receipt.gasUsed); // Fixed to handle BigInt
-      const gasPrice = (await provider.getGasPrice()).toNumber();
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000; // Default to 1.5 Gwei if null
       const gasCostEth = gasUsed * gasPrice / 1e18; // Convert wei to ETH
       const gasCostUsd = gasCostEth * ETH_PRICE_USD; // Convert ETH to USD
       console.log(`Gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
@@ -117,17 +118,17 @@ app.post('/webhook', async (req, res) => {
       console.log(`Claim processed for ${From}`);
       res.send('OK');
     } else {
-      console.log(`Unknown command: ${Body}, sending OK`);
+      console.log(`Unknown command: ${Body}, sending OK');
       res.send('OK');
     }
   } catch (error) {
-    console.error('Webhook error - Details:', error.message, error.stack);
+    console.error('Webhook error - Details:', error.message, error.stack');
     res.status(500).send('Server error');
   }
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception - Details:', error.message, error.stack);
+  console.error('Uncaught Exception - Details:', error.message, error.stack');
 });
 
 app.listen(3000, () => console.log('Server on port 3000'));
