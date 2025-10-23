@@ -104,7 +104,7 @@ app.post('/webhook', async (req, res) => {
       await client.messages.create({
         from: 'whatsapp:+14155238886', // Reverted to original number
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n${gasCostUsd < 0.01 ? 'This remittance cost you < $0.01' : 'This remittance only cost you $' + gasCostUsd.toFixed(2)}\n***DEMO ONLY 🤍 Kuya***`
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n${gasCostUsd < 0.01 ? 'Transaction Fee < $0.01' : 'This remittance only cost you $' + gasCostUsd.toFixed(2)}\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
@@ -122,13 +122,13 @@ app.post('/webhook', async (req, res) => {
       res.send('OK');
     }
   } catch (error) {
-    console.error('Webhook error - Details:', error.message, error.stack);
+    console.error('Webhook error - Details:', error.message, error.stack');
     res.status(500).send('Server error');
   }
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception - Details:', error.message, error.stack);
+  console.error('Uncaught Exception - Details:', error.message, error.stack');
 });
 
 app.listen(3000, () => console.log('Server on port 3000'));
