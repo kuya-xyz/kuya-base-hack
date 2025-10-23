@@ -93,16 +93,16 @@ app.post('/webhook', async (req, res) => {
       console.log(`Minted ${amountInMicroUSDC} micro-USDC, Tx: ${tx.hash}`);
 
       await client.messages.create({
-        from: 'whatsapp:+14155238886',
+        from: 'whatsapp:+12025550123', // Updated Twilio number (replace with your new number)
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🖤 Kuya***` // Updated to requested line
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Base Tx: ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***` // Updated with white heart
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
       await client.messages.create({
-        from: 'whatsapp:+14155238886',
+        from: 'whatsapp:+12025550123', // Updated Twilio number (replace with your new number)
         to: From,
         body: `You received pesos in GCash! Check your app.`
       });
