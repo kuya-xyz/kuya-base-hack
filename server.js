@@ -9,17 +9,18 @@ app.use(express.json());
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const privateKey = process.env.PRIVATE_KEY;
+const privateKey = process.env.PRIVATE_KEY; // Mainnet wallet
+const badgePrivateKey = process.env.BADGE_PRIVATE_KEY; // Sepolia badge wallet
 
-if (!accountSid || !authToken || !privateKey) {
-  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, or PRIVATE_KEY');
+if (!accountSid || !authToken || !privateKey || !badgePrivateKey) {
+  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, PRIVATE_KEY, or BADGE_PRIVATE_KEY');
   process.exit(1);
 }
 
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// Mainnet for standard remittance flow
+// Mainnet for remittance flow
 console.log('Initializing Ethers provider (mainnet)...');
 const mainnetProvider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   name: 'base-mainnet',
@@ -39,7 +40,7 @@ const sepoliaProvider = new ethers.JsonRpcProvider('https://sepolia.base.org', {
   name: 'base-sepolia',
   chainId: 84532
 });
-const sepoliaWallet = new ethers.Wallet(privateKey, sepoliaProvider);
+const sepoliaWallet = new ethers.Wallet(badgePrivateKey, sepoliaProvider);
 
 const wallets = new Map();
 const ETH_PRICE_USD = 2600;
@@ -82,7 +83,7 @@ app.post('/webhook', async (req, res) => {
       const recipientAddress = wallets.get(recipientNumber);
       let badgeMessage = '';
       let txHash = '';
-      
+
       if (dollarAmount === 100) {
         // Award badge on Sepolia for $100 transfers
         console.log(`Minting Kuya High-Value Badge to ${recipientAddress} on Sepolia`);
