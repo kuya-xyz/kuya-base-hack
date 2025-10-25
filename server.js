@@ -1,4 +1,5 @@
 <div style="font-family:Arial, sans-serif; padding:30px; max-width:600px; margin:auto; background:transparent; color:#000; text-align:center;">
+  <h1>Kuya: WhatsApp Onchain Remittance, Powered by Base</h1>
   <input id="from" placeholder="Manila, Cebu, Davao..." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Home city">
   <input id="to" placeholder="Dubai, Toronto, Singapore..." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Destination city">
   <button id="searchBtn" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Search for Filipinos">Search</button>
@@ -154,23 +155,22 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   function sendMoney() {
     try {
-      alert('Kuya is the safest most affordable way to send money back home. Just text "join today-made" to 1-415-523-8886 to sign up. Then text "Send $5 to (name)" to try it!');
+      alert('Kuya is the safest most affordable way to send money back home. Just text "join today-made" to 1-415-523-8886 to sign up. Then text "Send $5 to [name]" to try it!');
     } catch (error) {
       console.error('sendMoney error:', error);
       showError('An error occurred while accessing send money.');
     }
   }
-  // Fixed wallet connection using Viem and WalletConnect for Base mainnet
-  const statusDiv = document.getElementById("status");
+  // Wallet connection using Viem and MetaMask for Base mainnet
+  const statusDiv = DOM.get('status');
   let userAddress = null;
   function showStatus(message, type = 'success') {
     statusDiv.innerHTML = `<span style="color: ${type === 'success' ? 'green' : 'red'}">${message}</span>`;
     statusDiv.style.display = 'block';
   }
-  // Connect to Base mainnet using Viem
-  document.getElementById("connectWalletBtn").onclick = async () => {
+  DOM.get('connectWalletBtn').addEventListener('click', async () => {
     try {
-      showStatus("Connecting to Base...", 'success');
+      showStatus('Connecting to Base...', 'success');
       if (typeof window.ethereum !== 'undefined') {
         // Viem client for Base mainnet
         const { createWalletClient, custom } = await import('viem');
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.error('Wallet connection error:', error);
       showStatus(`Connection failed: ${error.message}`, 'error');
     }
-  };
+  });
   function showError(message) {
     DOM.setText('errorText', message);
     DOM.show('error');
