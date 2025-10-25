@@ -20,7 +20,7 @@ if (!accountSid || !authToken || !privateKey || !badgePrivateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// Mainnet for remittance flow
+// Mainnet for remittance and referral flow
 console.log('Initializing Ethers provider (mainnet)...');
 const mainnetProvider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   name: 'base-mainnet',
@@ -43,6 +43,7 @@ const sepoliaProvider = new ethers.JsonRpcProvider('https://sepolia.base.org', {
 const sepoliaWallet = new ethers.Wallet(badgePrivateKey, sepoliaProvider);
 
 const wallets = new Map();
+const referrals = new Map(); // Track referrer -> referee phone numbers
 const ETH_PRICE_USD = 2600;
 
 // Health check
@@ -130,6 +131,52 @@ app.post('/webhook', async (req, res) => {
         body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...${badgeMessage}\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} to ${recipientNumber}`);
+      res.send('OK');
+    } else if (Body.toLowerCase().startsWith('refer ')) {
+      const match = Body.match(/refer\s+(.+)/i);
+      if (!match) {
+        console.log(`Invalid refer format: ${Body}`);
+        return res.status(400).send('Invalid format - try refer [phone]');
+      }
+      const refereeNumber = match[1].trim();
+      if (!refereeNumber.startsWith('whatsapp:+')) {
+        console.log(`Invalid phone format: ${refereeNumber}`);
+        return res.status(400).send('Invalid phone number - use whatsapp:+[number]');
+      }
+      const referrerNumber = From;
+      if (!wallets.has(referrerNumber)) {
+        console.log(`Referrer ${referrerNumber} not registered`);
+        return res.status(400).send('You must send money first to refer others');
+      }
+      referrals.set(refereeNumber, referrerNumber);
+      console.log(`Referral recorded: ${referrerNumber} referred ${refereeNumber}`);
+      // Simulate $5 USDC bonus for month 12
+      const referrerAddress = wallets.get(referrerNumber);
+      const bonusAmount = 5000000; // $5 in micro-USDC
+      console.log(`Minting $5 USDC referral bonus to ${referrerAddress} on mainnet`);
+      const tx = await usdcContract.mint(referrerAddress, bonusAmount, {
+        gasLimit: 200000
+      });
+      console.log(`Waiting for referral transaction ${tx.hash}`);
+      await tx.wait();
+      const receipt = await mainnetProvider.getTransactionReceipt(tx.hash);
+      const gasUsed = Number(receipt.gasUsed);
+      const feeData = await mainnetProvider.getFeeData();
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
+      const gasCostEth = gasUsed * gasPrice / 1e18;
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD;
+      console.log(`Referral gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: referrerNumber,
+        body: `Thanks for referring ${refereeNumber}! You've earned a $5 USDC bonus. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
+      });
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: refereeNumber,
+        body: `You've been referred to Kuya by a friend! Text "Send $5 to [name]" to try it. ***DEMO ONLY 🤍 Kuya***`
+      });
+      console.log(`Referral response sent to ${referrerNumber} and ${refereeNumber}`);
       res.send('OK');
     } else if (Body.toLowerCase() === 'claim') {
       console.log(`Processing claim for ${From}`);
