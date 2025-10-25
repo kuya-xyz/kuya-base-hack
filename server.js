@@ -3,8 +3,8 @@ const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
+app.use(express.json()); // Parse JSON data
 
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
@@ -65,11 +65,9 @@ app.post('/webhook', async (req, res) => {
     if (Body.toLowerCase() === 'join today-made') {
       // Handle sign-up and mint a welcome badge on Sepolia
       const recipientNumber = From;
-      if (!wallets.has(recipientNumber)) {
-        const newWallet = ethers.Wallet.createRandom();
-        wallets.set(recipientNumber, newWallet.address);
-      }
-      const recipientAddress = wallets.get(recipientNumber);
+      const newWallet = ethers.Wallet.createRandom(); // Always create new wallet for testing
+      wallets.set(recipientNumber, newWallet.address);
+      const recipientAddress = newWallet.address;
       console.log(`Minting Kuya Welcome Badge to ${recipientAddress} on Sepolia`);
       const tx = await sepoliaWallet.sendTransaction({
         to: recipientAddress,
