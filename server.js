@@ -3,8 +3,8 @@ const twilio = require('twilio');
 const ethers = require('ethers');
 
 const app = express();
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
-app.use(express.json()); // Parse JSON data
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
@@ -19,24 +19,32 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// NEW NOTE: Use Base mainnet RPC with explicit chain ID
-console.log('Initializing Ethers provider...');
-const provider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
+// Mainnet for remittance flow
+console.log('Initializing Ethers provider (mainnet)...');
+const mainnetProvider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   name: 'base-mainnet',
-  chainId: 8453 // Explicitly set Base mainnet chain ID
+  chainId: 8453
 });
-console.log('Initializing Ethers wallet...');
-const wallet = new ethers.Wallet(privateKey, provider);
+const mainnetWallet = new ethers.Wallet(privateKey, mainnetProvider);
+const usdcAddress = '0x846849310a0fE0524a3E0eaB545789C616eAB39B'; // Mainnet Mock USDC
+const usdcAbi = ["function mint(address to, uint256 amount) public"];
+const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, mainnetWallet);
+const rateContractAddress = '0x827E15376f3B32949C0124F05fD7D708eA7AeEC2'; // Mainnet RateContract
+const rateAbi = ["function getRate() view returns (uint256)"];
+const rateContract = new ethers.Contract(rateContractAddress, rateAbi, mainnetProvider);
+
+// Sepolia for badge reward
+console.log('Initializing Ethers provider (Sepolia)...');
+const sepoliaProvider = new ethers.JsonRpcProvider('https://sepolia.base.org', {
+  name: 'base-sepolia',
+  chainId: 84532
+});
+const sepoliaWallet = new ethers.Wallet(privateKey, sepoliaProvider);
+
 const wallets = new Map();
+const ETH_PRICE_USD = 2600; // Example price
 
-// NEW: Add Mock USDC contract setup here (restored from previous versions)
-const usdcAddress = '0x846849310a0fe0524a3e0eab545789c616eab39b'; // Your deployed Mock USDC contract address (for reference, redeploy on Base mainnet if needed)
-// NEW NOTE: Define a simple contract for conversion rate (deployed on Base mainnet)
-const rateContractAddress = '0x51456c155B55AB3B01F6CaF3c1aa3aDD0C587697'; // Your deployed RateContract address on Base Mainnet
-const rateAbi = ["function getRate() view returns (uint256)"]; // Simple function returning USD to PHP rate (e.g., 57 for $1 = ₱57)
-const rateContract = new ethers.Contract(rateContractAddress, rateAbi, provider); // Read-only, no wallet needed
-
-// Immediate and robust health check
+// Health check
 app.get('/health', (req, res) => {
   console.log('Health check requested');
   res.status(200).send('Healthy');
@@ -54,29 +62,73 @@ app.post('/webhook', async (req, res) => {
   }
   console.log(`Processing message from ${From} with Body: ${Body}`);
   try {
-    if (Body.toLowerCase().startsWith('send $')) {
-      const dollarAmount = parseFloat(Body.split('$')[1]);
-      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) { // Increased limit from 10 to 100
-        console.error('Invalid or excessive amount parsed from:', Body);
-        return res.status(400).send('Invalid amount (max $100)');
-      }
-      // NEW NOTE: Convert dollar amount to micro-USDC (6 decimals); e.g., $5 = 5,000,000 micro-USDC (restored from previous versions)
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000); // Precise conversion for $5 = 5,000,000 micro-USDC
-      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
-
-      // NEW NOTE: Read conversion rate from Base mainnet contract (no gas cost for read-only call), fixed BigInt issue
-      // NEW NOTE: Static rate of 57 is used (e.g., $1 = ₱57); consider future upgrade to real-time oracle (e.g., Chainlink) for dynamic rates
-      const rate = await rateContract.getRate(); // Fetch rate as BigInt (e.g., 57n)
-      const pesoAmount = Number(BigInt(dollarAmount) * rate); // Convert and multiply
-      console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
-
+    if (Body.toLowerCase() === 'join today-made') {
+      // Handle sign-up and mint a welcome badge on Sepolia
       const recipientNumber = From;
-      // FUTURE MINTING INJECTION POINT: Here, you can add minting logic with usdcContract.mint(recipientAddress, amountInMicroUSDC) once wallet is funded with Base mainnet ETH
-      // For now, simulate response without minting
+      if (!wallets.has(recipientNumber)) {
+        const newWallet = ethers.Wallet.createRandom();
+        wallets.set(recipientNumber, newWallet.address);
+      }
+      const recipientAddress = wallets.get(recipientNumber);
+      console.log(`Minting Kuya Welcome Badge to ${recipientAddress} on Sepolia`);
+      const tx = await sepoliaWallet.sendTransaction({
+        to: recipientAddress,
+        value: ethers.parseEther('0'), // Mock badge (0 ETH)
+        gasLimit: 21000
+      });
+      await tx.wait();
+      const receipt = await sepoliaProvider.getTransactionReceipt(tx.hash);
+      const gasUsed = Number(receipt.gasUsed);
+      const feeData = await sepoliaProvider.getFeeData();
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
+      const gasCostEth = gasUsed * gasPrice / 1e18;
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD;
+      console.log(`Badge transaction hash: ${tx.hash}`);
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Sending $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)}! Recipient texts "CLAIM" to get it in GCash. (Base mainnet rate applied - DEMO only)` // Updated message
+        body: `Welcome to Kuya! You've earned a Kuya Welcome Badge on Base Sepolia. Transaction Fee < $0.01, Base Ref# ${tx.hash.substring(0, 10)}...\nText "send $5 to [name]" to send money! ***DEMO ONLY 🤍 Kuya***`
+      });
+      console.log(`Badge response sent to ${recipientNumber}`);
+      res.send('OK');
+    } else if (Body.toLowerCase().startsWith('send $')) {
+      const match = Body.match(/send \$(\d+(?:\.\d+)?)\s+to\s+(.+?)(?:\s|$)/i);
+      if (!match) {
+        return res.status(400).send('Invalid format - try Send $5 to [name]');
+      }
+      const dollarAmount = parseFloat(match[1]);
+      const recipientName = match[2].trim();
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
+        console.error('Invalid or excessive amount parsed from:', Body);
+        return res.status(400).send('Invalid amount (max $100)');
+      }
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
+      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
+      const rate = await rateContract.getRate();
+      const pesoAmount = Number(BigInt(dollarAmount) * rate);
+      console.log(`Conversion rate from contract: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
+      const recipientNumber = From;
+      if (!wallets.has(recipientNumber)) {
+        const newWallet = ethers.Wallet.createRandom();
+        wallets.set(recipientNumber, newWallet.address);
+      }
+      const recipientAddress = wallets.get(recipientNumber);
+      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
+      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
+        gasLimit: 200000
+      });
+      await tx.wait();
+      const receipt = await mainnetProvider.getTransactionReceipt(tx.hash);
+      const gasUsed = Number(receipt.gasUsed);
+      const feeData = await mainnetProvider.getFeeData();
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
+      const gasCostEth = gasUsed * gasPrice / 1e18;
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD;
+      console.log(`Gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: recipientNumber,
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientNumber}`);
       res.send('OK');
