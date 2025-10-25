@@ -19,7 +19,7 @@ if (!accountSid || !authToken || !privateKey) {
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// Mainnet for remittance flow
+// Mainnet for standard remittance flow
 console.log('Initializing Ethers provider (mainnet)...');
 const mainnetProvider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
   name: 'base-mainnet',
@@ -33,7 +33,7 @@ const rateContractAddress = '0x827E15376f3B32949C0124F05fD7D708eA7AeEC2';
 const rateAbi = ["function getRate() view returns (uint256)"];
 const rateContract = new ethers.Contract(rateContractAddress, rateAbi, mainnetProvider);
 
-// Sepolia for badge reward
+// Sepolia for $100 badge reward
 console.log('Initializing Ethers provider (Sepolia)...');
 const sepoliaProvider = new ethers.JsonRpcProvider('https://sepolia.base.org', {
   name: 'base-sepolia',
@@ -50,7 +50,6 @@ app.get('/health', (req, res) => {
   res.status(200).send('Healthy');
 });
 
-// Webhook with enhanced logging
 app.post('/webhook', async (req, res) => {
   console.log('Webhook hit - Headers:', JSON.stringify(req.headers, null, 2));
   console.log('Webhook hit - Raw Body:', JSON.stringify(req.body, null, 2));
@@ -63,44 +62,7 @@ app.post('/webhook', async (req, res) => {
   }
   console.log(`Processing message from ${From} with Body: "${Body}"`);
   try {
-    if (Body.toLowerCase() === 'join today-made') {
-      console.log(`Handling join for ${From}`);
-      const recipientNumber = From;
-      if (!wallets.has(recipientNumber)) {
-        const newWallet = ethers.Wallet.createRandom();
-        wallets.set(recipientNumber, newWallet.address);
-        const recipientAddress = newWallet.address;
-        console.log(`Minting Kuya Welcome Badge to ${recipientAddress} on Sepolia`);
-        const tx = await sepoliaWallet.sendTransaction({
-          to: recipientAddress,
-          value: ethers.parseEther('0'),
-          gasLimit: 21000
-        });
-        console.log(`Waiting for transaction ${tx.hash}`);
-        await tx.wait();
-        const receipt = await sepoliaProvider.getTransactionReceipt(tx.hash);
-        const gasUsed = Number(receipt.gasUsed);
-        const feeData = await sepoliaProvider.getFeeData();
-        const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
-        const gasCostEth = gasUsed * gasPrice / 1e18;
-        const gasCostUsd = gasCostEth * ETH_PRICE_USD;
-        console.log(`Badge transaction confirmed: ${tx.hash}`);
-        await client.messages.create({
-          from: 'whatsapp:+14155238886',
-          to: recipientNumber,
-          body: `Welcome to Kuya! You've earned a Kuya Welcome Badge on Base Sepolia. Transaction Fee < $0.01, Base Ref# ${tx.hash.substring(0, 10)}...\nText "send $5 to [name]" to send money! ***DEMO ONLY 🤍 Kuya***`
-        });
-        console.log(`Badge response sent to ${recipientNumber}`);
-      } else {
-        console.log(`User ${recipientNumber} already registered, skipping badge`);
-        await client.messages.create({
-          from: 'whatsapp:+14155238886',
-          to: recipientNumber,
-          body: `You're already registered with Kuya! Text "send $5 to [name]" to send money. ***DEMO ONLY 🤍 Kuya***`
-        });
-      }
-      res.send('OK');
-    } else if (Body.toLowerCase().startsWith('send $')) {
+    if (Body.toLowerCase().startsWith('send $')) {
       const match = Body.match(/send \$(\d+(?:\.\d+)?)\s+to\s+(.+?)(?:\s|$)/i);
       if (!match) {
         console.log(`Invalid send format: ${Body}`);
@@ -112,18 +74,43 @@ app.post('/webhook', async (req, res) => {
         console.error('Invalid or excessive amount:', Body);
         return res.status(400).send('Invalid amount (max $100)');
       }
-      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
-      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
-      const rate = await rateContract.getRate();
-      const pesoAmount = Number(BigInt(dollarAmount) * rate);
-      console.log(`Conversion rate: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
       const recipientNumber = From;
       if (!wallets.has(recipientNumber)) {
         const newWallet = ethers.Wallet.createRandom();
         wallets.set(recipientNumber, newWallet.address);
       }
       const recipientAddress = wallets.get(recipientNumber);
-      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress}`);
+      let badgeMessage = '';
+      let txHash = '';
+      
+      if (dollarAmount === 100) {
+        // Award badge on Sepolia for $100 transfers
+        console.log(`Minting Kuya High-Value Badge to ${recipientAddress} on Sepolia`);
+        const badgeTx = await sepoliaWallet.sendTransaction({
+          to: recipientAddress,
+          value: ethers.parseEther('0'),
+          gasLimit: 21000
+        });
+        console.log(`Waiting for badge transaction ${badgeTx.hash}`);
+        await badgeTx.wait();
+        const badgeReceipt = await sepoliaProvider.getTransactionReceipt(badgeTx.hash);
+        const badgeGasUsed = Number(badgeReceipt.gasUsed);
+        const badgeFeeData = await sepoliaProvider.getFeeData();
+        const badgeGasPrice = badgeFeeData.gasPrice ? Number(badgeFeeData.gasPrice) : 1500000000;
+        const badgeGasCostEth = badgeGasUsed * badgeGasPrice / 1e18;
+        const badgeGasCostUsd = badgeGasCostEth * ETH_PRICE_USD;
+        console.log(`Badge transaction confirmed: ${badgeTx.hash}`);
+        badgeMessage = `\nYou've earned a Kuya High-Value Badge on Base Sepolia! Transaction Fee < $0.01, Base Ref# ${badgeTx.hash.substring(0, 10)}...`;
+        txHash = badgeTx.hash;
+      }
+
+      // Perform remittance on mainnet
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
+      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
+      const rate = await rateContract.getRate();
+      const pesoAmount = Number(BigInt(dollarAmount) * rate);
+      console.log(`Conversion rate: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
+      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress} on mainnet`);
       const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
         gasLimit: 200000
       });
@@ -139,7 +126,7 @@ app.post('/webhook', async (req, res) => {
       await client.messages.create({
         from: 'whatsapp:+14155238886',
         to: recipientNumber,
-        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...${badgeMessage}\n***DEMO ONLY 🤍 Kuya***`
       });
       console.log(`Response sent for $${dollarAmount} to ${recipientNumber}`);
       res.send('OK');
