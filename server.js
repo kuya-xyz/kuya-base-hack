@@ -9,30 +9,27 @@ app.use(express.json());
 // Load credentials from environment variables
 const accountSid = process.env.TWILIO_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const privateKey = process.env.BADGE_PRIVATE_KEY; // Sepolia wallet for all transactions
+const privateKey = process.env.PRIVATE_KEY; // Mainnet wallet for all transactions
 
 if (!accountSid || !authToken || !privateKey) {
-  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, or BADGE_PRIVATE_KEY');
+  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, or PRIVATE_KEY');
   process.exit(1);
 }
 
 console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
 const client = new twilio(accountSid, authToken);
 
-// Sepolia for all transactions (remittance, referral, badge)
-console.log('Initializing Ethers provider (Sepolia)...');
-const sepoliaProvider = new ethers.JsonRpcProvider('https://sepolia.base.org', {
-  name: 'base-sepolia',
-  chainId: 84532
+// Mainnet for all transactions (remittance, referral, badge)
+console.log('Initializing Ethers provider (mainnet)...');
+const mainnetProvider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
+  name: 'base-mainnet',
+  chainId: 8453
 });
-const sepoliaWallet = new ethers.Wallet(privateKey, sepoliaProvider);
-// Mock USDC and rate contracts on Sepolia (use testnet addresses or mock contracts)
-const usdcAddress = '0x846849310a0fE0524a3E0eaB545789C616eAB39B'; // Replace with Sepolia testnet USDC address
+const mainnetWallet = new ethers.Wallet(privateKey, mainnetProvider);
+const usdcAddress = '0x846849310a0fE0524a3E0eaB545789C616eAB39B';
 const usdcAbi = ["function mint(address to, uint256 amount) public"];
-const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, sepoliaWallet);
-const rateContractAddress = '0x827E15376f3B32949C0124F05fD7D708eA7AeEC2'; // Replace with Sepolia testnet rate contract
-const rateAbi = ["function getRate() view returns (uint256)"];
-const rateContract = new ethers.Contract(rateContractAddress, rateAbi, sepoliaProvider);
+const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, mainnetWallet);
+const FIXED_RATE = 56; // $1 = ₱56 (fixed for demo)
 
 const wallets = new Map();
 const referrals = new Map(); // Track referrer -> referee phone numbers
@@ -78,41 +75,40 @@ app.post('/webhook', async (req, res) => {
       let txHash = '';
 
       if (dollarAmount === 100) {
-        // Award badge on Sepolia for $100 transfers
-        console.log(`Minting Kuya High-Value Badge to ${recipientAddress} on Sepolia`);
-        const badgeTx = await sepoliaWallet.sendTransaction({
+        // Award badge on mainnet for $100 transfers
+        console.log(`Minting Kuya High-Value Badge to ${recipientAddress} on mainnet`);
+        const badgeTx = await mainnetWallet.sendTransaction({
           to: recipientAddress,
           value: ethers.parseEther('0'),
           gasLimit: 21000
         });
         console.log(`Waiting for badge transaction ${badgeTx.hash}`);
         await badgeTx.wait();
-        const badgeReceipt = await sepoliaProvider.getTransactionReceipt(badgeTx.hash);
+        const badgeReceipt = await mainnetProvider.getTransactionReceipt(badgeTx.hash);
         const badgeGasUsed = Number(badgeReceipt.gasUsed);
-        const badgeFeeData = await sepoliaProvider.getFeeData();
+        const badgeFeeData = await mainnetProvider.getFeeData();
         const badgeGasPrice = badgeFeeData.gasPrice ? Number(badgeFeeData.gasPrice) : 1500000000;
         const badgeGasCostEth = badgeGasUsed * badgeGasPrice / 1e18;
         const badgeGasCostUsd = badgeGasCostEth * ETH_PRICE_USD;
         console.log(`Badge transaction confirmed: ${badgeTx.hash}`);
-        badgeMessage = `\nYou've earned a Kuya High-Value Badge on Base Sepolia! Transaction Fee < $0.01, Base Ref# ${badgeTx.hash.substring(0, 10)}...`;
+        badgeMessage = `\nYou've earned a Kuya High-Value Badge on Base Mainnet! Transaction Fee < $0.01, Base Ref# ${badgeTx.hash.substring(0, 10)}...`;
         txHash = badgeTx.hash;
       }
 
-      // Perform remittance on Sepolia
+      // Perform remittance on mainnet
       const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
       console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
-      const rate = await rateContract.getRate();
-      const pesoAmount = Number(BigInt(dollarAmount) * rate);
-      console.log(`Conversion rate: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
-      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress} on Sepolia`);
+      const pesoAmount = dollarAmount * FIXED_RATE;
+      console.log(`Conversion rate: $1 = ₱${FIXED_RATE}, Total: ₱${pesoAmount}`);
+      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress} on mainnet`);
       const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
         gasLimit: 200000
       });
       console.log(`Waiting for transaction ${tx.hash}`);
       await tx.wait();
-      const receipt = await sepoliaProvider.getTransactionReceipt(tx.hash);
+      const receipt = await mainnetProvider.getTransactionReceipt(tx.hash);
       const gasUsed = Number(receipt.gasUsed);
-      const feeData = await sepoliaProvider.getFeeData();
+      const feeData = await mainnetProvider.getFeeData();
       const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
       const gasCostEth = gasUsed * gasPrice / 1e18;
       const gasCostUsd = gasCostEth * ETH_PRICE_USD;
@@ -142,18 +138,18 @@ app.post('/webhook', async (req, res) => {
       }
       referrals.set(refereeNumber, referrerNumber);
       console.log(`Referral recorded: ${referrerNumber} referred ${refereeNumber}`);
-      // Simulate $5 USDC bonus on Sepolia
+      // Simulate $5 USDC bonus for month 12
       const referrerAddress = wallets.get(referrerNumber);
       const bonusAmount = 5000000; // $5 in micro-USDC
-      console.log(`Minting $5 USDC referral bonus to ${referrerAddress} on Sepolia`);
+      console.log(`Minting $5 USDC referral bonus to ${referrerAddress} on mainnet`);
       const tx = await usdcContract.mint(referrerAddress, bonusAmount, {
         gasLimit: 200000
       });
       console.log(`Waiting for referral transaction ${tx.hash}`);
       await tx.wait();
-      const receipt = await sepoliaProvider.getTransactionReceipt(tx.hash);
+      const receipt = await mainnetProvider.getTransactionReceipt(tx.hash);
       const gasUsed = Number(receipt.gasUsed);
-      const feeData = await sepoliaProvider.getFeeData();
+      const feeData = await mainnetProvider.getFeeData();
       const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
       const gasCostEth = gasUsed * gasPrice / 1e18;
       const gasCostUsd = gasCostEth * ETH_PRICE_USD;
