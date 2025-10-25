@@ -1,324 +1,204 @@
-<div style="font-family:Arial, sans-serif; padding:30px; max-width:600px; margin:auto; background:transparent; color:#000; text-align:center;">
-  <h1>Kuya: WhatsApp Onchain Remittance, Powered by Base</h1>
-  <input id="from" placeholder="Manila, Cebu, Davao..." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Home city">
-  <input id="to" placeholder="Dubai, Toronto, Singapore..." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Destination city">
-  <button id="searchBtn" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Search for Filipinos">Search</button>
-  <div id="message" style="margin-top:20px; font-size:18px; text-align:center; display:none;" role="status">You are not alone.</div>
-  <div id="count" style="margin-top:10px; font-size:16px; text-align:center; display:none;" role="status" aria-live="polite"></div>
-  <div id="cta" style="margin-top:10px; text-align:center; display:none;">
-    <button id="boardBtn" style="background:#28a745; color:white; padding:10px 20px; margin:10px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="View message board">Message Board</button>
-    <button id="connectWalletBtn" style="background:#28a745; color:white; padding:10px 20px; margin:10px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Connect wallet">Connect Wallet</button>
-    <button id="sendBtn" style="background:#28a745; color:white; padding:10px 20px; margin:10px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Send money">Send Money</button>
-  </div>
-  <div id="status" style="margin-top:10px; text-align:center; display:none;"></div>
-  <div id="board" style="margin-top:20px; display:none;">
-    <h3 style="font-size:16px; text-align:left;" aria-label="Community message board">Local City Board</h3>
-    <input id="postMsg" placeholder="Need SIM, roommate, etc." style="width:100%; padding:10px; margin:10px 0; font-size:16px; border:1px solid #ddd; border-radius:4px;" aria-label="Post a message">
-    <div id="error" style="color:#ff4444; font-size:14px; margin-bottom:10px; display:none;">
-      <span id="errorText"></span>
-      <button id="dismissErrorBtn" style="background:transparent; border:none; color:#ff4444; text-decoration:underline; cursor:pointer;" aria-label="Dismiss error">Dismiss</button>
-    </div>
-    <button id="postBtn" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:4px; font-size:16px; cursor:pointer;" aria-label="Post message">Post</button>
-    <div id="wall" style="font-size:14px; color:#333; height:300px; overflow:auto;" aria-live="polite"></div>
-  </div>
-</div>
-<script src="https://unpkg.com/viem@2.x/dist/index.umd.js"></script>
-<script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const cityStats = {
-    'dubai': { total: 1500000, fromManila: 14000 },
-    'toronto': { total: 250000, fromManila: 5000 },
-    'singapore': { total: 203243, fromManila: 3000 },
-    'riyadh': { total: 725893, fromManila: 8000 },
-    'vancouver': { total: 250000, fromManila: 4000 },
-    'cruise (norwegian star)': { total: 400000, fromManila: 5000 },
-    'london': { total: 164000, fromManila: 2000 },
-    'los angeles': { total: 800000, fromManila: 10000 },
-    'hong kong': { total: 186869, fromManila: 3000 }
-  };
-  const mockPosts = {
-    'dubai': [
-      '2025-10-19: Need SIM near Burj, text 09xx',
-      '2025-10-18: Roommate wanted, 5K AED/month',
-      '2025-10-17: Anyone from Manila here?'
-    ],
-    'toronto': [
-      '2025-10-19: Looking for winter coat deals',
-      '2025-10-18: Nurse job openings, DM me',
-      '2025-10-17: Pinoy potluck this weekend?'
-    ]
-  };
-  let localPosts = {};
-  const DOM = {
-    get: id => {
-      const element = document.getElementById(id);
-      if (!element) console.error(`Element with ID '${id}' not found`);
-      return element;
-    },
-    show: id => {
-      const element = DOM.get(id);
-      if (element) element.style.display = 'block';
-    },
-    hide: id => {
-      const element = DOM.get(id);
-      if (element) element.style.display = 'none';
-    },
-    setText: (id, text) => {
-      const element = DOM.get(id);
-      if (element) element.textContent = text;
-    },
-    setHTML: (id, html) => {
-      const element = DOM.get(id);
-      if (element) element.innerHTML = html;
-    }
-  };
-  async function search() {
-    try {
-      let from = DOM.get('from')?.value.trim().toLowerCase() || 'your home';
-      let to = DOM.get('to')?.value.trim().toLowerCase() || 'there';
-      if (!DOM.get('count') || !DOM.get('message') || !DOM.get('cta')) {
-        console.error('Required DOM elements (count, message, or cta) are missing');
-        showError('An error occurred. Please try again.');
-        return;
+const express = require('express');
+const twilio = require('twilio');
+const ethers = require('ethers');
+
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+// Load credentials from environment variables
+const accountSid = process.env.TWILIO_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const privateKey = process.env.PRIVATE_KEY; // Mainnet wallet
+const badgePrivateKey = process.env.BADGE_PRIVATE_KEY; // Sepolia badge wallet
+
+if (!accountSid || !authToken || !privateKey || !badgePrivateKey) {
+  console.error('Missing environment variables: TWILIO_SID, TWILIO_AUTH_TOKEN, PRIVATE_KEY, or BADGE_PRIVATE_KEY');
+  process.exit(1);
+}
+
+console.log('Initializing Twilio client with SID:', accountSid.substring(0, 5) + '...');
+const client = new twilio(accountSid, authToken);
+
+// Mainnet for remittance and referral flow
+console.log('Initializing Ethers provider (mainnet)...');
+const mainnetProvider = new ethers.JsonRpcProvider('https://mainnet.base.org', {
+  name: 'base-mainnet',
+  chainId: 8453
+});
+const mainnetWallet = new ethers.Wallet(privateKey, mainnetProvider);
+const usdcAddress = '0x846849310a0fE0524a3E0eaB545789C616eAB39B';
+const usdcAbi = ["function mint(address to, uint256 amount) public"];
+const usdcContract = new ethers.Contract(usdcAddress, usdcAbi, mainnetWallet);
+const rateContractAddress = '0x827E15376f3B32949C0124F05fD7D708eA7AeEC2';
+const rateAbi = ["function getRate() view returns (uint256)"];
+const rateContract = new ethers.Contract(rateContractAddress, rateAbi, mainnetProvider);
+
+// Sepolia for $100 badge reward
+console.log('Initializing Ethers provider (Sepolia)...');
+const sepoliaProvider = new ethers.JsonRpcProvider('https://sepolia.base.org', {
+  name: 'base-sepolia',
+  chainId: 84532
+});
+const sepoliaWallet = new ethers.Wallet(badgePrivateKey, sepoliaProvider);
+
+const wallets = new Map();
+const referrals = new Map(); // Track referrer -> referee phone numbers
+const ETH_PRICE_USD = 2600;
+
+// Health check
+app.get('/health', (req, res) => {
+  console.log('Health check requested');
+  res.status(200).send('Healthy');
+});
+
+app.post('/webhook', async (req, res) => {
+  console.log('Webhook hit - Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Webhook hit - Raw Body:', JSON.stringify(req.body, null, 2));
+  let { From, Body } = req.body || {};
+  if (typeof Body !== 'string') Body = (req.body.Body || '').toString().trim();
+  if (typeof From !== 'string') From = (req.body.From || '').toString().trim();
+  if (!From || !Body) {
+    console.error('Invalid request - From or Body missing:', { From, Body, raw: req.body });
+    return res.status(400).send('Invalid request - Missing From or Body');
+  }
+  console.log(`Processing message from ${From} with Body: "${Body}"`);
+  try {
+    if (Body.toLowerCase().startsWith('send $')) {
+      const match = Body.match(/send \$(\d+(?:\.\d+)?)\s+to\s+(.+?)(?:\s|$)/i);
+      if (!match) {
+        console.log(`Invalid send format: ${Body}`);
+        return res.status(400).send('Invalid format - try Send $5 to [name]');
       }
-      if (to in cityStats) {
-        DOM.setHTML('count', `${cityStats[to].total.toLocaleString()} Filipinos are currently in ${to.charAt(0).toUpperCase() + to.slice(1)}.<br>${cityStats[to].fromManila.toLocaleString()} are from your hometown of ${from.charAt(0).toUpperCase() + from.slice(1)}.`);
-        DOM.show('message');
-        DOM.show('count');
-        DOM.show('cta');
-      } else {
-        const closest = getClosestCity(to);
-        DOM.setHTML('count', closest
-          ? `Sorry, no data for ${to.charAt(0).toUpperCase() + to.slice(1)}. Did you mean ${closest.charAt(0).toUpperCase() + closest.slice(1)}?`
-          : `Sorry, no data for ${to.charAt(0).toUpperCase() + to.slice(1)} yet. Try Dubai or Toronto.`);
-        DOM.hide('message');
-        DOM.show('count');
-        DOM.hide('cta');
+      const dollarAmount = parseFloat(match[1]);
+      const recipientName = match[2].trim();
+      if (isNaN(dollarAmount) || dollarAmount <= 0 || dollarAmount > 100) {
+        console.error('Invalid or excessive amount:', Body);
+        return res.status(400).send('Invalid amount (max $100)');
       }
-    } catch (error) {
-      console.error('Search error:', error);
-      showError('An error occurred while searching. Please try again.');
-    }
-  }
-  function showBoard() {
-    try {
-      let to = DOM.get('to')?.value.trim().toLowerCase();
-      if (!to) {
-        showError('Please enter a destination city.');
-        return;
+      const recipientNumber = From;
+      if (!wallets.has(recipientNumber)) {
+        const newWallet = ethers.Wallet.createRandom();
+        wallets.set(recipientNumber, newWallet.address);
       }
-      DOM.show('board');
-      loadPosts(to);
-      DOM.get('postMsg')?.focus();
-    } catch (error) {
-      console.error('showBoard error:', error);
-      showError('An error occurred while opening the message board.');
-    }
-  }
-  function postMessage() {
-    try {
-      let msg = DOM.get('postMsg')?.value.trim();
-      let to = DOM.get('to')?.value.trim().toLowerCase();
-      if (!msg || !to) {
-        showError('Please enter a message and destination city.');
-        return;
-      }
-      if (!localPosts[to]) localPosts[to] = [];
-      localPosts[to].unshift(`${new Date().toISOString().slice(0, 10)}: ${msg}`);
-      DOM.get('postMsg').value = '';
-      loadPosts(to);
-    } catch (error) {
-      console.error('postMessage error:', error);
-      showError('An error occurred while posting the message.');
-    }
-  }
-  function loadPosts(city) {
-    try {
-      const wall = DOM.get('wall');
-      if (!wall) return;
-      DOM.setHTML('wall', '');
-      const posts = [...(localPosts[city] || []), ...(mockPosts[city] || [])];
-      posts.forEach(post => {
-        const div = document.createElement('div');
-        div.style.background = '#f0f0f0';
-        div.style.padding = '10px';
-        div.style.margin = '10px 0';
-        div.style.borderRadius = '5px';
-        div.textContent = post;
-        wall.appendChild(div);
-      });
-    } catch (error) {
-      console.error('loadPosts error:', error);
-      showError('An error occurred while loading posts.');
-    }
-  }
-  function sendMoney() {
-    try {
-      alert('Kuya is the safest most affordable way to send money back home. Just text "join today-made" to 1-415-523-8886 to sign up. Then text "Send $5 to [name]" to try it!');
-    } catch (error) {
-      console.error('sendMoney error:', error);
-      showError('An error occurred while accessing send money.');
-    }
-  }
-  // Wallet connection using Viem and MetaMask for Base mainnet
-  const statusDiv = DOM.get('status');
-  let userAddress = null;
-  function showStatus(message, type = 'success') {
-    statusDiv.innerHTML = `<span style="color: ${type === 'success' ? 'green' : 'red'}">${message}</span>`;
-    statusDiv.style.display = 'block';
-  }
-  DOM.get('connectWalletBtn').addEventListener('click', async () => {
-    try {
-      showStatus('Connecting to Base...', 'success');
-      if (typeof window.ethereum !== 'undefined') {
-        // Viem client for Base mainnet
-        const { createWalletClient, custom } = await import('viem');
-        const { base } = await import('viem/chains');
-        const walletClient = createWalletClient({
-          chain: base,
-          transport: custom(window.ethereum),
+      const recipientAddress = wallets.get(recipientNumber);
+      let badgeMessage = '';
+      let txHash = '';
+
+      if (dollarAmount === 100) {
+        // Award badge on Sepolia for $100 transfers
+        console.log(`Minting Kuya High-Value Badge to ${recipientAddress} on Sepolia`);
+        const badgeTx = await sepoliaWallet.sendTransaction({
+          to: recipientAddress,
+          value: ethers.parseEther('0'),
+          gasLimit: 21000
         });
-        const [address] = await walletClient.requestAddresses();
-        userAddress = address;
-        showStatus(`Connected! Address: ${address.slice(0, 6)}...${address.slice(-4)}`, 'success');
-        console.log('Connected to Base:', address);
-      } else {
-        showStatus('MetaMask not found. Install MetaMask and try again.', 'error');
+        console.log(`Waiting for badge transaction ${badgeTx.hash}`);
+        await badgeTx.wait();
+        const badgeReceipt = await sepoliaProvider.getTransactionReceipt(badgeTx.hash);
+        const badgeGasUsed = Number(badgeReceipt.gasUsed);
+        const badgeFeeData = await sepoliaProvider.getFeeData();
+        const badgeGasPrice = badgeFeeData.gasPrice ? Number(badgeFeeData.gasPrice) : 1500000000;
+        const badgeGasCostEth = badgeGasUsed * badgeGasPrice / 1e18;
+        const badgeGasCostUsd = badgeGasCostEth * ETH_PRICE_USD;
+        console.log(`Badge transaction confirmed: ${badgeTx.hash}`);
+        badgeMessage = `\nYou've earned a Kuya High-Value Badge on Base Sepolia! Transaction Fee < $0.01, Base Ref# ${badgeTx.hash.substring(0, 10)}...`;
+        txHash = badgeTx.hash;
       }
-    } catch (error) {
-      console.error('Wallet connection error:', error);
-      showStatus(`Connection failed: ${error.message}`, 'error');
-    }
-  });
-  function showError(message) {
-    DOM.setText('errorText', message);
-    DOM.show('error');
-    setTimeout(() => DOM.hide('error'), 5000);
-  }
-  function dismissError() {
-    DOM.hide('error');
-  }
-  function getClosestCity(input) {
-    try {
-      const cities = Object.keys(cityStats);
-      let minDistance = Infinity;
-      let closestCity = null;
-      cities.forEach(city => {
-        const distance = levenshteinDistance(input, city);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestCity = city;
-        }
+
+      // Perform remittance on mainnet
+      const amountInMicroUSDC = Math.floor(dollarAmount * 1000000);
+      console.log(`Converting $${dollarAmount} to ${amountInMicroUSDC} micro-USDC`);
+      const rate = await rateContract.getRate();
+      const pesoAmount = Number(BigInt(dollarAmount) * rate);
+      console.log(`Conversion rate: $1 = ₱${rate}, Total: ₱${pesoAmount}`);
+      console.log(`Minting ${amountInMicroUSDC} micro-USDC to ${recipientAddress} on mainnet`);
+      const tx = await usdcContract.mint(recipientAddress, amountInMicroUSDC, {
+        gasLimit: 200000
       });
-      return minDistance <= 3 ? closestCity : null;
-    } catch (error) {
-      console.error('getClosestCity error:', error);
-      return null;
+      console.log(`Waiting for transaction ${tx.hash}`);
+      await tx.wait();
+      const receipt = await mainnetProvider.getTransactionReceipt(tx.hash);
+      const gasUsed = Number(receipt.gasUsed);
+      const feeData = await mainnetProvider.getFeeData();
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
+      const gasCostEth = gasUsed * gasPrice / 1e18;
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD;
+      console.log(`Gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: recipientNumber,
+        body: `Just sent $${dollarAmount} ≈ ₱${pesoAmount.toFixed(2)} to ${recipientName}! Recipient texts CLAIM to receive in GCash. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...${badgeMessage}\n***DEMO ONLY 🤍 Kuya***`
+      });
+      console.log(`Response sent for $${dollarAmount} to ${recipientNumber}`);
+      res.send('OK');
+    } else if (Body.toLowerCase().startsWith('refer ')) {
+      const match = Body.match(/refer\s+(.+)/i);
+      if (!match) {
+        console.log(`Invalid refer format: ${Body}`);
+        return res.status(400).send('Invalid format - try refer [phone]');
+      }
+      const refereeNumber = match[1].trim();
+      if (!refereeNumber.startsWith('whatsapp:+')) {
+        console.log(`Invalid phone format: ${refereeNumber}`);
+        return res.status(400).send('Invalid phone number - use whatsapp:+[number]');
+      }
+      const referrerNumber = From;
+      if (!wallets.has(referrerNumber)) {
+        console.log(`Referrer ${referrerNumber} not registered`);
+        return res.status(400).send('You must send money first to refer others');
+      }
+      referrals.set(refereeNumber, referrerNumber);
+      console.log(`Referral recorded: ${referrerNumber} referred ${refereeNumber}`);
+      // Simulate $5 USDC bonus for month 12
+      const referrerAddress = wallets.get(referrerNumber);
+      const bonusAmount = 5000000; // $5 in micro-USDC
+      console.log(`Minting $5 USDC referral bonus to ${referrerAddress} on mainnet`);
+      const tx = await usdcContract.mint(referrerAddress, bonusAmount, {
+        gasLimit: 200000
+      });
+      console.log(`Waiting for referral transaction ${tx.hash}`);
+      await tx.wait();
+      const receipt = await mainnetProvider.getTransactionReceipt(tx.hash);
+      const gasUsed = Number(receipt.gasUsed);
+      const feeData = await mainnetProvider.getFeeData();
+      const gasPrice = feeData.gasPrice ? Number(feeData.gasPrice) : 1500000000;
+      const gasCostEth = gasUsed * gasPrice / 1e18;
+      const gasCostUsd = gasCostEth * ETH_PRICE_USD;
+      console.log(`Referral gas used: ${gasUsed}, Cost: $${gasCostUsd.toFixed(2)}`);
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: referrerNumber,
+        body: `Thanks for referring ${refereeNumber}! You've earned a $5 USDC bonus. Transaction Fee ${gasCostUsd < 0.01 ? '< $0.01' : 'only $' + gasCostUsd.toFixed(2)}\nBase Ref# ${tx.hash.substring(0, 10)}...\n***DEMO ONLY 🤍 Kuya***`
+      });
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: refereeNumber,
+        body: `You've been referred to Kuya by a friend! Text "Send $5 to [name]" to try it. ***DEMO ONLY 🤍 Kuya***`
+      });
+      console.log(`Referral response sent to ${referrerNumber} and ${refereeNumber}`);
+      res.send('OK');
+    } else if (Body.toLowerCase() === 'claim') {
+      console.log(`Processing claim for ${From}`);
+      await client.messages.create({
+        from: 'whatsapp:+14155238886',
+        to: From,
+        body: `You received pesos in GCash! Check your app.`
+      });
+      console.log(`Claim processed for ${From}`);
+      res.send('OK');
+    } else {
+      console.log(`Unknown command: "${Body}"`);
+      res.send('OK');
     }
-  }
-  function levenshteinDistance(a, b) {
-    try {
-      const matrix = Array(b.length + 1).fill().map(() => Array(a.length + 1).fill(0));
-      for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
-      for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
-      for (let j = 1; j <= b.length; j++) {
-        for (let i = 1; i <= a.length; i++) {
-          const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
-          matrix[j][i] = Math.min(
-            matrix[j][i - 1] + 1,
-            matrix[j - 1][i] + 1,
-            matrix[j - 1][i - 1] + indicator
-          );
-        }
-      }
-      return matrix[b.length][a.length];
-    } catch (error) {
-      console.error('levenshteinDistance error:', error);
-      return Infinity;
-    }
-  }
-  // Attach event listeners
-  const searchBtn = DOM.get('searchBtn');
-  if (searchBtn) {
-    searchBtn.addEventListener('click', search);
-    searchBtn.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        search();
-      }
-    });
-  } else {
-    console.error('Search button not found');
-  }
-  const boardBtn = DOM.get('boardBtn');
-  if (boardBtn) {
-    boardBtn.addEventListener('click', showBoard);
-    boardBtn.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        showBoard();
-      }
-    });
-  } else {
-    console.error('Message Board button not found');
-  }
-  const sendBtn = DOM.get('sendBtn');
-  if (sendBtn) {
-    sendBtn.addEventListener('click', sendMoney);
-    sendBtn.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        sendMoney();
-      }
-    });
-  } else {
-    console.error('Send Money button not found');
-  }
-  const fromInput = DOM.get('from');
-  if (fromInput) {
-    fromInput.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        search();
-      }
-    });
-  }
-  const toInput = DOM.get('to');
-  if (toInput) {
-    toInput.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        search();
-      }
-    });
-  }
-  const postMsgInput = DOM.get('postMsg');
-  if (postMsgInput) {
-    postMsgInput.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        postMessage();
-      }
-    });
-  }
-  const postBtn = DOM.get('postBtn');
-  if (postBtn) {
-    postBtn.addEventListener('click', postMessage);
-    postBtn.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        postMessage();
-      }
-    });
-  } else {
-    console.error('Post button not found');
-  }
-  const dismissErrorBtn = DOM.get('dismissErrorBtn');
-  if (dismissErrorBtn) {
-    dismissErrorBtn.addEventListener('click', dismissError);
-  } else {
-    console.error('Dismiss error button not found');
+  } catch (error) {
+    console.error('Webhook error:', error.message, error.stack);
+    res.status(500).send('Server error');
   }
 });
-</script>
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error.message, error.stack);
+});
+
+app.listen(3000, () => console.log('Server on port 3000'));
